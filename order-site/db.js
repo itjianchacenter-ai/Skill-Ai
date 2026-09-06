@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS order_counters (
 );
 `);
 
+// promo_code: 10-digit POS promotion code handed to the customer once the order is paid
+if (!db.prepare("SELECT 1 FROM pragma_table_info('orders') WHERE name = 'promo_code'").get()) {
+  db.exec('ALTER TABLE orders ADD COLUMN promo_code TEXT');
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_promo_code ON orders(promo_code) WHERE promo_code IS NOT NULL');
+
 /** Next order number for today (YYYYMMDD + 5 digits), atomic. */
 const nextOrderNumber = db.transaction(() => {
   const d = new Date();

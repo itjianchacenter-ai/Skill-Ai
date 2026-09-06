@@ -3,6 +3,10 @@
   "stock": {
     "total": 1000
   },
+  "promo_code": {
+    "from": 2026090001,
+    "to": 2026092000
+  },
   "drinks": [
     {
       "id": "D1",

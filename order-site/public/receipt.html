@@ -37,6 +37,7 @@
         <tr><th>Pick-up Location <span class="th">/ สถานที่รับของ</span></th><td><b>${esc(o.store_name)}</b></td></tr>
         <tr><th>Status <span class="th">/ สถานะ</span></th><td>${en} <span class="th">(${th})</span>${o.paid_at ? ' · ' + fmtDateTime(o.paid_at) : ''}</td></tr>
         ${o.note ? `<tr><th>หมายเหตุ</th><td>${esc(o.note)}</td></tr>` : ''}
+        ${o.promo_code ? `<tr><th>Promotion code <span class="th">/ รหัสโปรโมชัน (POS)</span></th><td class="mono">${esc(o.promo_code)}</td></tr>` : ''}
       </table>
       <table class="r-lines">
         <thead><tr><th>Item <span class="th">/ รายการ</span></th><th class="q">Qty</th><th class="p">Unit (฿)</th><th class="p">Total (฿)</th></tr></thead>

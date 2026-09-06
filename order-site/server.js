@@ -34,7 +34,9 @@ function loadMenu() {
   const norm = (x) => ({ id: String(x.id), name_en: x.name_en || '', name_th: x.name_th || '', price: Number(x.price) || 0, image: x.image || '', active: x.active !== false });
   const lim = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null); // null = unlimited
   const stock = { total: lim((m.stock || {}).total), drink: lim((m.stock || {}).drink), dessert: lim((m.stock || {}).dessert) };
-  return { banner: m.banner || '', stock, drinks: (m.drinks || []).map(norm).filter((x) => x.active), desserts: (m.desserts || []).map(norm).filter((x) => x.active) };
+  const pc = m.promo_code || {};
+  const promo_code = { from: Number.isInteger(Number(pc.from)) ? Number(pc.from) : 2026090001, to: Number.isInteger(Number(pc.to)) ? Number(pc.to) : 2026092000 };
+  return { banner: m.banner || '', stock, promo_code, drinks: (m.drinks || []).map(norm).filter((x) => x.active), desserts: (m.desserts || []).map(norm).filter((x) => x.active) };
 }
 
 /** Pieces already committed by every order that is not cancelled (pending ones reserve stock). */
@@ -168,6 +170,7 @@ function orderView(o, { admin = false } = {}) {
     id: o.id, order_number: o.order_number, store_id: o.store_id, store_name: o.store_name,
     total: o.total, status: o.status, note: o.note, created_at: o.created_at, paid_at: o.paid_at,
     picked_up_at: o.picked_up_at, has_slip: Boolean(o.slip_path), slip_reason: o.slip_reason,
+    promo_code: o.promo_code || null, code_available: ['paid', 'picked_up'].includes(o.status),
     lines: (o.lines || []).map((l) => ({ drink_id: l.drink_id, drink_name: l.drink_name, dessert_id: l.dessert_id, dessert_name: l.dessert_name, quantity: l.quantity, unit_price: l.unit_price, line_total: l.line_total })),
   };
   if (admin) Object.assign(v, { customer_id: o.customer_id, slip_url: o.slip_path ? `/uploads/${path.basename(o.slip_path)}` : '', slip_ref: o.slip_ref, slip_amount: o.slip_amount, slip_verified: o.slip_verified, cancelled_at: o.cancelled_at });
@@ -192,6 +195,27 @@ app.get('/api/orders/:id/qr', async (req, res) => {
   if (!(o.total > 0)) return res.status(400).json({ error: 'ยอดคำสั่งซื้อเป็น 0 ไม่ต้องชำระเงิน' });
   try { res.json({ qr_data_url: await generateQR(o.total), amount: o.total }); } catch (e) { res.status(500).json({ error: e.message }); }
 }); 
+
+// Hand out (or repeat) the POS promotion code for a paid order: a random unused
+// number in the configured range, assigned once and stored on the order.
+const assignPromoCode = db.transaction((orderId) => {
+  const o = db.prepare('SELECT status, promo_code FROM orders WHERE id = ?').get(orderId);
+  if (!o) { const e = new Error('ไม่พบคำสั่งซื้อ'); e.status = 404; throw e; }
+  if (o.promo_code) return o.promo_code;
+  if (!['paid', 'picked_up'].includes(o.status)) { const e = new Error('รับ code ได้เมื่อชำระเงินเรียบร้อยแล้ว / Available after payment'); e.status = 400; throw e; }
+  const { from, to } = loadMenu().promo_code;
+  const used = new Set(db.prepare('SELECT promo_code FROM orders WHERE promo_code IS NOT NULL').all().map((r) => Number(r.promo_code)));
+  if (used.size >= to - from + 1) { const e = new Error('รหัสโปรโมชันถูกใช้ครบแล้ว กรุณาติดต่อเจ้าหน้าที่'); e.status = 409; throw e; }
+  let code;
+  do { code = from + crypto.randomInt(to - from + 1); } while (used.has(code));
+  db.prepare('UPDATE orders SET promo_code = ? WHERE id = ?').run(String(code), orderId);
+  return String(code);
+});
+app.post('/api/orders/:id/code', (req, res) => {
+  const o = ownOrderOr404(req, res); if (!o) return;
+  try { res.json({ promo_code: assignPromoCode(o.id), order: orderView(getOrder(o.id)) }); }
+  catch (e) { if (e.status) return res.status(e.status).json({ error: e.message }); throw e; }
+});
 
 const upload = multer({
   storage: multer.diskStorage({

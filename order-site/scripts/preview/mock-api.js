@@ -35,7 +35,7 @@ function pvSeed() {
       total, status, note, created_at: created, paid_at: ['paid', 'picked_up'].includes(status) ? pvNow(-minutesAgo + 6) : null,
       picked_up_at: status === 'picked_up' ? pvNow(-minutesAgo + 90) : null, cancelled_at: status === 'cancelled' ? pvNow(-minutesAgo + 30) : null,
       slip_url: slip ? pvSlipSvg(total) : '', slip_hash: slip ? 'seed' + i : '', slip_ref: slip && status !== 'slip_uploaded' ? 'DEMO' + day + i : '', slip_amount: slip ? total : null,
-      slip_reason: status === 'slip_uploaded' ? 'รอเจ้าหน้าที่ตรวจสอบสลิป' : '', slip_verified: 0, lines: ls,
+      slip_reason: status === 'slip_uploaded' ? 'รอเจ้าหน้าที่ตรวจสอบสลิป' : '', slip_verified: 0, lines: ls, promo_code: status === 'picked_up' ? '2026091234' : null,
     };
   };
   const orders = [
@@ -56,7 +56,7 @@ function pvNextNumber(d) {
   d.counter.seq += 1; return day + String(d.counter.seq).padStart(5, '0');
 }
 function pvView(o, admin) {
-  const v = { id: o.id, order_number: o.order_number, store_id: o.store_id, store_name: o.store_name, total: o.total, status: o.status, note: o.note, created_at: o.created_at, paid_at: o.paid_at, picked_up_at: o.picked_up_at, has_slip: Boolean(o.slip_url), slip_reason: o.slip_reason, lines: o.lines };
+  const v = { id: o.id, order_number: o.order_number, store_id: o.store_id, store_name: o.store_name, total: o.total, status: o.status, note: o.note, created_at: o.created_at, paid_at: o.paid_at, picked_up_at: o.picked_up_at, has_slip: Boolean(o.slip_url), slip_reason: o.slip_reason, lines: o.lines, promo_code: o.promo_code || null, code_available: ['paid', 'picked_up'].includes(o.status) };
   if (admin) Object.assign(v, { customer_id: o.customer_id, slip_url: o.slip_url, slip_ref: o.slip_ref, slip_amount: o.slip_amount, slip_verified: o.slip_verified, cancelled_at: o.cancelled_at });
   return v;
 }
@@ -121,7 +121,7 @@ async function api(path, opts = {}) {
     const total = pvMoney(lines.reduce((s, l) => s + l.line_total, 0));
     const want = lines.reduce((w, r) => { if (r.drink_id) w.drink += r.quantity; if (r.dessert_id) w.dessert += r.quantity; w.total = w.drink + w.dessert; return w; }, { drink: 0, dessert: 0, total: 0 });
     const short = pvStockShortfall(d, want); if (short) pvFail(short);
-    const o = { id: pvUuid(), order_number: pvNextNumber(d), customer_id: me, store_id: store.id, store_name: `${store.brand} - ${store.name}`, total, status: total > 0 ? 'pending' : 'paid', note: String(body.note || '').slice(0, 500), created_at: pvNow(), paid_at: total > 0 ? null : pvNow(), picked_up_at: null, cancelled_at: null, slip_url: '', slip_hash: '', slip_ref: '', slip_amount: null, slip_reason: '', slip_verified: 0, lines };
+    const o = { promo_code: null, id: pvUuid(), order_number: pvNextNumber(d), customer_id: me, store_id: store.id, store_name: `${store.brand} - ${store.name}`, total, status: total > 0 ? 'pending' : 'paid', note: String(body.note || '').slice(0, 500), created_at: pvNow(), paid_at: total > 0 ? null : pvNow(), picked_up_at: null, cancelled_at: null, slip_url: '', slip_hash: '', slip_ref: '', slip_amount: null, slip_reason: '', slip_verified: 0, lines };
     d.orders.unshift(o); pvSave(d); return pvView(o);
   }
   if (p === '/api/orders') return d.orders.filter((o) => o.customer_id === me).map((o) => pvView(o));
@@ -136,6 +136,17 @@ async function api(path, opts = {}) {
     if (d.orders.some((x) => x.id !== o.id && x.slip_hash === hash && x.status !== 'cancelled')) { return { ok: false, status: 'pending', reason: 'ภาพสลิปนี้เคยถูกใช้แล้ว', order: pvView(o) }; }
     Object.assign(o, { slip_url: dataUrl, slip_hash: hash, slip_reason: 'รอเจ้าหน้าที่ตรวจสอบสลิป', status: 'slip_uploaded' }); pvSave(d);
     return { ok: true, status: o.status, reason: o.slip_reason, order: pvView(o) };
+  }
+  if ((m = p.match(/^\/api\/orders\/([^/]+)\/code$/)) && method === 'POST') {
+    const o = own(m[1]);
+    if (!o.promo_code) {
+      if (!['paid', 'picked_up'].includes(o.status)) pvFail('รับ code ได้เมื่อชำระเงินเรียบร้อยแล้ว / Available after payment');
+      const from = Number((PREVIEW_MENU.promo_code || {}).from) || 2026090001, to = Number((PREVIEW_MENU.promo_code || {}).to) || 2026092000;
+      const used = new Set(d.orders.map((x) => x.promo_code).filter(Boolean));
+      let code; do { code = String(from + Math.floor(Math.random() * (to - from + 1))); } while (used.has(code));
+      o.promo_code = code; pvSave(d);
+    }
+    return { promo_code: o.promo_code, order: pvView(o) };
   }
   if ((m = p.match(/^\/api\/orders\/([^/]+)$/))) return pvView(own(m[1]));
   if (p === '/api/admin/login') { if (body.username !== PREVIEW_ADMIN.username || body.password !== PREVIEW_ADMIN.password) pvFail('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); d.admin = true; pvSave(d); return { ok: true }; }

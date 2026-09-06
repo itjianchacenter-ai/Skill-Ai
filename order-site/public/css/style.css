@@ -67,6 +67,10 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .btn.ghost{background:#fff;color:#000}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .empty{color:var(--muted);font-size:14px;padding:12px 0}
+.code-box{display:inline-flex;align-items:center;gap:14px;border:2px dashed #000;border-radius:12px;background:#fff;padding:8px 14px;font-size:12px;line-height:1.2}
+.code-box small{color:var(--muted);font-family:"Montserrat",sans-serif}
+.code-box b{font-size:22px;letter-spacing:2px;font-variant-numeric:tabular-nums}
+.code-box .pill{padding:4px 10px;font-size:12px}
 
 /* chips */
 .chips{display:flex;flex-wrap:wrap;gap:12px}

@@ -60,6 +60,7 @@
   $('#logout').addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }); location.reload(); });
 
   const list = $('#list'); bindOrderToggles(list);
+  bindCodeActions(list, (updated) => load(updated.id));
   list.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-action]'); if (!b) return;
     const id = b.closest('.order').dataset.id; const to = b.dataset.action;
@@ -78,6 +79,7 @@
     if (['pending', 'slip_uploaded', 'paid'].includes(o.status)) acts.push(btn('cancelled', 'ยกเลิก'));
     const slip = o.slip_url ? `<div style="margin-top:14px"><b style="font-size:13px">สลิป</b> <span style="font-size:12px;color:var(--muted)">${o.slip_verified ? 'ตรวจอัตโนมัติผ่าน' : 'ตรวจด้วยเจ้าหน้าที่'}${o.slip_ref ? ' · ref ' + esc(o.slip_ref) : ''}${o.slip_amount != null ? ' · ' + money(o.slip_amount) + ' ฿' : ''}</span><br><a href="${esc(o.slip_url)}" target="_blank" rel="noopener"><img class="slip-thumb" src="${esc(o.slip_url)}" alt="slip"></a></div>` : '';
     acts.push(`<a class="btn ghost" href="/receipt?order=${esc(o.id)}" target="_blank" rel="noopener">${ICONS.print} Print</a>`);
+    if (codeBox(o)) acts.push(codeBox(o));
     return slip + '<div class="actions">' + acts.join('') + '</div>';
   }
 

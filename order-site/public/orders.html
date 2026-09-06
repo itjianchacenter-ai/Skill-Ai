@@ -14,15 +14,20 @@
 (async () => {
   renderHeader('orders');
   const list = $('#list'); bindOrderToggles(list);
+  bindCodeActions(list, (updated) => {
+    const card = list.querySelector(`.order[data-id="${CSS.escape(updated.id)}"]`);
+    if (card) card.outerHTML = orderCard(updated, { open: true, extra: extraFor(updated) });
+  });
   const orders = await api('/api/orders');
   if (!orders.length) { list.innerHTML = '<div class="empty">ยังไม่มีประวัติการสั่งซื้อ / No orders yet. <a href="/">Order now</a></div>'; return; }
-  list.innerHTML = orders.map((o) => {
+  list.innerHTML = orders.map((o) => orderCard(o, { extra: extraFor(o) })).join('');
+  function extraFor(o) {
     const printBtn = `<a class="btn ghost" href="/receipt?order=${esc(o.id)}">${ICONS.print} Print <span class="th">/ พิมพ์ใบรายการ</span></a>`;
-    let extra = `<div class="actions">${printBtn}</div>`;
+    let extra = `<div class="actions">${codeBox(o)}${printBtn}</div>`;
     if (o.status === 'pending') extra = `<div class="actions"><a class="btn" href="/pay?order=${esc(o.id)}">${o.has_slip ? 'อัปโหลดสลิปใหม่ / Re-upload slip' : 'ชำระเงิน / Pay now'}</a>${printBtn}</div>`;
     if (o.status === 'slip_uploaded') extra = `<div class="actions"><span class="th" style="font-size:13px">ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ</span>${printBtn}</div>`;
-    return orderCard(o, { extra });
-  }).join('');
+    return extra;
+  }
 })();
 </script>
 </body>

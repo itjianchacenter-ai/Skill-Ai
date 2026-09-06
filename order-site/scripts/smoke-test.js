@@ -75,7 +75,14 @@ const png = (seed, name) => { const f = new FormData(); f.append('slip', new Blo
     r = await call('other', 'GET', (await call('admin', 'GET', '/api/admin/orders')).json.rows[0].slip_url); check('stranger cannot open slip image', r.status === 404);
 
     r = await call('admin', 'POST', `/api/admin/orders/${order.id}/status`, { status: 'picked_up' }); check('invalid transition rejected', r.status === 400);
+    r = await call('customer', 'POST', `/api/orders/${order.id}/code`); check('code refused before payment', r.status === 400, r.json);
     r = await call('admin', 'POST', `/api/admin/orders/${order.id}/status`, { status: 'paid' }); check('admin confirms payment', r.json.status === 'paid' && r.json.paid_at);
+    r = await call('customer', 'POST', `/api/orders/${order.id}/code`);
+    check('promo code issued in range', r.status === 200 && /^\d{10}$/.test(r.json.promo_code) && Number(r.json.promo_code) >= 2026090001 && Number(r.json.promo_code) <= 2026092000, r.json);
+    const code1 = r.json.promo_code;
+    r = await call('customer', 'POST', `/api/orders/${order.id}/code`); check('same code on repeat', r.json.promo_code === code1);
+    r = await call('customer', 'GET', `/api/orders/${order.id}`); check('code visible on order', r.json.promo_code === code1 && r.json.code_available === true);
+    r = await call('other', 'POST', `/api/orders/${order.id}/code`); check('stranger cannot get code', r.status === 404);
     r = await call('admin', 'POST', `/api/admin/orders/${order.id}/status`, { status: 'picked_up' }); check('admin marks picked up', r.json.status === 'picked_up');
     r = await call('admin', 'POST', `/api/admin/orders/${order2.id}/status`, { status: 'pending' }); check('admin bounces slip', r.json.status === 'pending');
     r = await call('customer', 'POST', `/api/orders/${order.id}/slip`, png(3)); check('paid order refuses new slip', r.status === 400);
@@ -91,6 +98,8 @@ const png = (seed, name) => { const f = new FormData(); f.append('slip', new Blo
     r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: d, dessert_id: s, quantity: 2 }] }); check('last 4 pieces accepted', r.status === 201, r.json);
     r = await call('customer', 'GET', '/api/menu'); check('menu reports sold out', r.json.stock.sold_out === true && r.json.stock.remaining.total === 0, r.json.stock);
     r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ dessert_id: s, quantity: 1 }] }); check('sold out rejected', r.status === 409 && /หมดแล้ว/.test(r.json.error), r.json);
+    r = await call('admin', 'POST', `/api/admin/orders/${bigOrder.id}/status`, { status: 'paid' });
+    r = await call('admin', 'POST', `/api/orders/${bigOrder.id}/code`); check('admin can issue code, unique', r.status === 200 && r.json.promo_code !== code1, r.json);
     r = await call('admin', 'POST', `/api/admin/orders/${bigOrder.id}/status`, { status: 'cancelled' }); check('admin cancels big order', r.json.status === 'cancelled');
     r = await call('customer', 'GET', '/api/stock'); check('cancelled order frees stock', r.json.remaining.total === 990, r.json);
     r = await call('admin', 'POST', '/api/admin/logout'); r = await call('admin', 'GET', '/api/admin/orders'); check('logout works', r.status === 401);

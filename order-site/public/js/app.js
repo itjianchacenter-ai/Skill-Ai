@@ -13,6 +13,7 @@ const ICONS = {
   down: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M4 8h16l-8 10L4 8z"/></svg>',
   arrowL: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M11 4l2 2-4 4h11v4H9l4 4-2 2-8-8 8-8z"/></svg>',
   arrowR: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 4l-2 2 4 4H4v4h11l-4 4 2 2 8-8-8-8z"/></svg>',
+  ticket: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7zm7 1v8h2V8H9zm4 0v8h2V8h-2z"/></svg>',
   print: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12v5H6V2zm-2 6h16a2 2 0 0 1 2 2v7h-4v5H6v-5H2v-7a2 2 0 0 1 2-2zm4 9v3h8v-3H8zm10-6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>',
   check: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.4-1.4z"/></svg>',
 };
@@ -185,6 +186,24 @@ function orderCard(o, { light = false, open = false, extra = '' } = {}) {
       ${extra}
     </div>
   </div>`;
+}
+/* POS promotion code: box when assigned, otherwise a button that fetches it */
+function codeBox(o) {
+  if (o.promo_code) {
+    return `<span class="code-box"><span class="th">รหัสโปรโมชัน<br><small>Promotion code for POS</small></span><b>${esc(o.promo_code)}</b><button type="button" class="pill" data-copy="${esc(o.promo_code)}">Copy</button></span>`;
+  }
+  if (o.code_available) return `<button type="button" class="btn" data-get-code="${esc(o.id)}">${ICONS.ticket} รับ code</button>`;
+  return '';
+}
+function bindCodeActions(root, onUpdated) {
+  root.addEventListener('click', async (e) => {
+    const c = e.target.closest('[data-copy]');
+    if (c) { try { await navigator.clipboard.writeText(c.dataset.copy); c.textContent = 'Copied'; setTimeout(() => { c.textContent = 'Copy'; }, 1500); } catch (err) { /* ignore */ } return; }
+    const b = e.target.closest('[data-get-code]'); if (!b) return;
+    b.disabled = true;
+    try { const r = await api('/api/orders/' + encodeURIComponent(b.dataset.getCode) + '/code', { method: 'POST' }); onUpdated(r.order); }
+    catch (err) { alert(err.message); b.disabled = false; }
+  });
 }
 function bindOrderToggles(root) {
   root.addEventListener('click', (e) => {
