@@ -1,5 +1,8 @@
 {
   "banner": "",
+  "stock": {
+    "total": 1000
+  },
   "drinks": [
     {
       "id": "D1",

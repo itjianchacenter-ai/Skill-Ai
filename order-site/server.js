@@ -32,7 +32,34 @@ function readJson(name, fallback) {
 function loadMenu() {
   const m = readJson('menu.json', { drinks: [], desserts: [] });
   const norm = (x) => ({ id: String(x.id), name_en: x.name_en || '', name_th: x.name_th || '', price: Number(x.price) || 0, image: x.image || '', active: x.active !== false });
-  return { banner: m.banner || '', drinks: (m.drinks || []).map(norm).filter((x) => x.active), desserts: (m.desserts || []).map(norm).filter((x) => x.active) };
+  const lim = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null); // null = unlimited
+  const stock = { total: lim((m.stock || {}).total), drink: lim((m.stock || {}).drink), dessert: lim((m.stock || {}).dessert) };
+  return { banner: m.banner || '', stock, drinks: (m.drinks || []).map(norm).filter((x) => x.active), desserts: (m.desserts || []).map(norm).filter((x) => x.active) };
+}
+
+/** Pieces already committed by every order that is not cancelled (pending ones reserve stock). */
+function stockUsage() {
+  const r = db.prepare(`SELECT COALESCE(SUM(CASE WHEN l.drink_id <> '' THEN l.quantity ELSE 0 END), 0) AS drink,
+                               COALESCE(SUM(CASE WHEN l.dessert_id <> '' THEN l.quantity ELSE 0 END), 0) AS dessert
+                        FROM order_lines l JOIN orders o ON o.id = l.order_id WHERE o.status <> 'cancelled'`).get();
+  return { drink: r.drink, dessert: r.dessert, total: r.drink + r.dessert };
+}
+function stockView(menu = loadMenu()) {
+  const used = stockUsage(); const remaining = {};
+  for (const k of ['total', 'drink', 'dessert']) remaining[k] = menu.stock[k] == null ? null : Math.max(0, menu.stock[k] - used[k]);
+  const soldOut = ['total', 'drink', 'dessert'].some((k) => remaining[k] === 0);
+  return { limits: menu.stock, used, remaining, sold_out: soldOut };
+}
+/** Returns an error message if `want` ({drink, dessert, total} pieces) does not fit in the remaining stock. */
+function stockShortfall(want, menu = loadMenu()) {
+  const { remaining } = stockView(menu);
+  const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
+  for (const k of ['total', 'drink', 'dessert']) {
+    if (remaining[k] != null && want[k] > remaining[k]) {
+      return remaining[k] === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${remaining[k]} ชิ้น (สั่ง ${want[k]} ชิ้น) / Only ${remaining[k]} left`;
+    }
+  }
+  return '';
 }
 function loadStores() {
   return readJson('stores.json', []).filter((s) => s.active !== false).map((s) => ({ id: String(s.id), brand: s.brand || 'JIAN CHA', name: s.name || '', map_url: s.map_url || '' }));
@@ -79,7 +106,8 @@ app.get('/admin-page', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'admin-p
 app.use(express.static(PUBLIC_DIR, { extensions: ['html'], index: 'index.html' }));
 
 // ─── Public API ───
-app.get('/api/menu', (req, res) => res.json(loadMenu()));
+app.get('/api/menu', (req, res) => { const m = loadMenu(); res.json({ ...m, stock: stockView(m) }); });
+app.get('/api/stock', (req, res) => res.json(stockView()));
 app.get('/api/stores', (req, res) => res.json(loadStores()));
 app.get('/api/config', (req, res) => res.json({ payment_ready: qrConfigured(), slip_auto_verify: slipOkEnabled() }));
 
@@ -109,8 +137,11 @@ app.post('/api/orders', (req, res) => {
     });
   }
   const total = money(rows.reduce((s, r) => s + r.line_total, 0));
+  const want = rows.reduce((w, r) => { if (r.drink_id) w.drink += r.quantity; if (r.dessert_id) w.dessert += r.quantity; w.total += (r.drink_id ? r.quantity : 0) + (r.dessert_id ? r.quantity : 0); return w; }, { drink: 0, dessert: 0, total: 0 });
   const id = crypto.randomUUID();
   const create = db.transaction(() => {
+    const short = stockShortfall(want, menu); // checked inside the write transaction so two customers cannot both take the last pieces
+    if (short) { const e = new Error(short); e.status = 409; throw e; }
     touchCustomer(req.customerId);
     const order_number = nextOrderNumber();
     // A zero-total order (free campaign item) has nothing to pay: it is paid on creation.
@@ -122,7 +153,7 @@ app.post('/api/orders', (req, res) => {
     for (const r of rows) ins.run(id, r.drink_id, r.drink_name, r.dessert_id, r.dessert_name, r.quantity, r.unit_price, r.line_total);
     return order_number;
   });
-  const order_number = create();
+  try { create(); } catch (e) { if (e.status === 409) return res.status(409).json({ error: e.message, stock: stockView(menu) }); throw e; }
   res.status(201).json(orderView(getOrder(id)));
 });
 
@@ -246,7 +277,7 @@ app.get('/api/admin/summary', requireAdmin, (req, res) => {
   const w = date ? " WHERE substr(created_at,1,10) = ?" : '';
   const byStatus = db.prepare(`SELECT status, COUNT(*) n, COALESCE(SUM(total),0) amount FROM orders${w} GROUP BY status`).all(...args);
   const byStore = db.prepare(`SELECT store_id, store_name, COUNT(*) n FROM orders${w}${w ? ' AND' : ' WHERE'} status IN ('paid','slip_uploaded') GROUP BY store_id, store_name ORDER BY store_name`).all(...args);
-  res.json({ by_status: byStatus, by_store: byStore });
+  res.json({ by_status: byStatus, by_store: byStore, stock: stockView() });
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }));

@@ -9,7 +9,8 @@
   <header class="site-head" id="site-head"></header>
 
   <section>
-    <div class="label" id="lbl-match"></div>
+    <div class="row-between"><div class="label" id="lbl-match"></div><span id="stock-pill" style="margin-bottom:14px"></span></div>
+    <div class="err" id="stock-err"></div>
     <div class="matches" id="matches"></div>
   </section>
 
@@ -48,12 +49,16 @@
   $('#lbl-cart').innerHTML = ICONS.cart + ' Cart Summary';
   const [menu, stores] = await Promise.all([getMenu(), api('/api/stores')]);
   const map = menuMap(menu);
+  let stock = menu.stock; const getStock = () => stock;
+  async function refreshStock() { try { stock = await api('/api/stock'); } catch (e) { /* keep last */ } render(); }
   $('#note').value = getNote();
   $('#note').addEventListener('input', (e) => setNote(e.target.value));
   $('#stores').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (b) { setStore(b.dataset.store); render(); } });
-  bindMatchControls($('#matches'), render);
+  bindMatchControls($('#matches'), render, { getStock, errEl: $('#stock-err') });
   function render() {
     const cart = loadCart(); const storeId = getStore(); const store = stores.find((s) => s.id === storeId);
+    $('#stock-pill').innerHTML = stockPill(stock);
+    $('#confirm').disabled = Boolean(stock && stock.sold_out);
     $('#matches').innerHTML = cart.map((l) => matchCard(l, map)).join('') || '<div class="match add">ตะกร้าว่าง<br><a href="/">กลับไปเลือกเมนู</a></div>';
     $('#stores').innerHTML = storeChips(stores, storeId);
     // aggregate per menu item, as in the design
@@ -66,7 +71,7 @@
     updateCartBadge();
   }
   render();
-  $('#confirm').addEventListener('click', () => submitOrder({ storeId: getStore(), note: $('#note').value, errEl: $('#err'), btn: $('#confirm') }));
+  $('#confirm').addEventListener('click', () => submitOrder({ storeId: getStore(), note: $('#note').value, errEl: $('#err'), btn: $('#confirm'), onFail: refreshStock }));
 })();
 </script>
 </body>

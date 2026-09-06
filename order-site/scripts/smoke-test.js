@@ -80,6 +80,19 @@ const png = (seed, name) => { const f = new FormData(); f.append('slip', new Blo
     r = await call('admin', 'POST', `/api/admin/orders/${order2.id}/status`, { status: 'pending' }); check('admin bounces slip', r.json.status === 'pending');
     r = await call('customer', 'POST', `/api/orders/${order.id}/slip`, png(3)); check('paid order refuses new slip', r.status === 400);
     r = await call('admin', 'GET', '/api/admin/summary'); check('admin summary', r.status === 200 && Array.isArray(r.json.by_status));
+    // stock limit (data/menu.json: total 1000 pieces; 6 pieces are already committed above)
+    r = await call('customer', 'GET', '/api/stock'); check('stock view', r.json.limits.total === 1000 && r.json.used.total === 6 && r.json.remaining.total === 994, r.json);
+    const big = (n) => Array.from({ length: n }, () => ({ drink_id: d, quantity: 99 }));
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: big(11) }); check('order above stock rejected', r.status === 409 && /เหลือเพียง 994/.test(r.json.error), r.json);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: big(10) }); check('order within stock accepted', r.status === 201, r.json);
+    const bigOrder = r.json;
+    r = await call('customer', 'GET', '/api/stock'); check('stock reserved by pending order', r.json.remaining.total === 4, r.json);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: d, dessert_id: s, quantity: 3 }] }); check('6 pieces vs 4 left rejected', r.status === 409, r.json);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: d, dessert_id: s, quantity: 2 }] }); check('last 4 pieces accepted', r.status === 201, r.json);
+    r = await call('customer', 'GET', '/api/menu'); check('menu reports sold out', r.json.stock.sold_out === true && r.json.stock.remaining.total === 0, r.json.stock);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ dessert_id: s, quantity: 1 }] }); check('sold out rejected', r.status === 409 && /หมดแล้ว/.test(r.json.error), r.json);
+    r = await call('admin', 'POST', `/api/admin/orders/${bigOrder.id}/status`, { status: 'cancelled' }); check('admin cancels big order', r.json.status === 'cancelled');
+    r = await call('customer', 'GET', '/api/stock'); check('cancelled order frees stock', r.json.remaining.total === 990, r.json);
     r = await call('admin', 'POST', '/api/admin/logout'); r = await call('admin', 'GET', '/api/admin/orders'); check('logout works', r.status === 401);
 
     r = await fetch(base + '/admin-page'); check('admin page served', r.status === 200 && /Admin/.test(await r.text()));

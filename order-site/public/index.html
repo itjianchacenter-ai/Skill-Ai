@@ -26,9 +26,11 @@
       <div class="label" id="lbl-match"></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
         <span class="note-pill"><b>หมายเหตุ:</b> สามารถเลือกจับคู่เองได้</span>
+        <span id="stock-pill"></span>
         <button type="button" class="btn" id="add-match" disabled>+ Add Match</button>
       </div>
     </div>
+    <div class="err" id="stock-err"></div>
     <div class="matches" id="matches"></div>
   </section>
 
@@ -73,6 +75,8 @@
 
   const [menu, stores] = await Promise.all([getMenu(), api('/api/stores')]);
   const map = menuMap(menu);
+  let stock = menu.stock; const getStock = () => stock;
+  async function refreshStock() { try { stock = await api('/api/stock'); } catch (e) { /* keep last */ } render(); }
   if (menu.banner) $('#hero').outerHTML = '<img class="hero" style="object-fit:cover;width:calc(100% - 80px)" src="' + esc(menu.banner) + '" alt="">';
 
   const itemHtml = (kind, x) => `<label class="item">
@@ -84,9 +88,12 @@
   $('#desserts').innerHTML = menu.desserts.map((x) => itemHtml('dessert', x)).join('') || '<div class="empty">ยังไม่มีเมนูของหวาน</div>';
 
   const sel = (kind) => ($(`input[name="${kind}"]:checked`) || {}).value || '';
-  const refreshAdd = () => { $('#add-match').disabled = !(sel('drink') || sel('dessert')); };
+  const refreshAdd = () => { $('#add-match').disabled = (stock && stock.sold_out) || !(sel('drink') || sel('dessert')); };
   document.addEventListener('change', (e) => { if (e.target.matches('input[type=radio]')) refreshAdd(); });
   $('#add-match').addEventListener('click', () => {
+    const short = stockCheck(stock, loadCart(), { drink: sel('drink') ? 1 : 0, dessert: sel('dessert') ? 1 : 0 });
+    if (short) { $('#stock-err').textContent = short; return; }
+    $('#stock-err').textContent = '';
     cartAdd(sel('drink'), sel('dessert'), 1);
     $$('input[type=radio]').forEach((r) => { r.checked = false; }); refreshAdd(); render();
   });
@@ -94,10 +101,13 @@
   $('#note').value = getNote();
   $('#note').addEventListener('input', (e) => setNote(e.target.value));
   $('#stores').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (b) { setStore(b.dataset.store); render(); } });
-  bindMatchControls($('#matches'), render);
+  bindMatchControls($('#matches'), render, { getStock, errEl: $('#stock-err') });
 
   function render() {
     const cart = loadCart(); const storeId = getStore(); const store = stores.find((s) => s.id === storeId);
+    $('#stock-pill').innerHTML = stockPill(stock);
+    $('#confirm').disabled = Boolean(stock && stock.sold_out);
+    refreshAdd();
     $('#matches').innerHTML = cart.map((l) => matchCard(l, map)).join('') || '<div class="match add">เลือกเครื่องดื่ม / ของหวานด้านบน<br>แล้วกด <b>+ Add Match</b><span class="th">Choose a drink and a dessert, then add your match</span></div>';
     $('#stores').innerHTML = storeChips(stores, storeId);
     const lines = cart.map((l) => `<li><span>${esc(lineName(l, map))}</span><span class="n">x ${l.quantity}</span><span class="p">${money(linePrice(l, map) * l.quantity)} ฿</span></li>`);
@@ -109,7 +119,7 @@
     updateCartBadge();
   }
   render();
-  $('#confirm').addEventListener('click', () => submitOrder({ storeId: getStore(), note: $('#note').value, errEl: $('#err'), btn: $('#confirm') }));
+  $('#confirm').addEventListener('click', () => submitOrder({ storeId: getStore(), note: $('#note').value, errEl: $('#err'), btn: $('#confirm'), onFail: refreshStock }));
 })();
 </script>
 </body>

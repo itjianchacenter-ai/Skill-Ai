@@ -34,7 +34,7 @@
   const state = { q: '', date: '', store: '', status: view === 'stores' ? 'paid' : '', page: 1 };
   app.innerHTML = `
     <div class="toolbar">
-      <input class="search" id="q" placeholder="Order No. / Location">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="search" id="q" placeholder="Order No. / Location"><span id="stock-pill"></span></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <select class="pill" id="status" style="padding-right:28px">
           <option value="">All status</option><option value="pending">รอชำระเงิน</option><option value="slip_uploaded">รอตรวจสลิป</option>
@@ -80,7 +80,14 @@
     return slip + '<div class="actions">' + acts.join('') + '</div>';
   }
 
+  async function loadStock() {
+    try {
+      const st = await api('/api/stock'); const fmt = (n) => (n == null ? '∞' : n.toLocaleString('en-US'));
+      $('#stock-pill').innerHTML = `<span class="note-pill ${st.sold_out ? 'sold' : ''}">Stock <b>${fmt(st.used.total)}</b> / ${fmt(st.limits.total)} ชิ้น · เหลือ <b>${fmt(st.remaining.total)}</b></span>`;
+    } catch (e) { /* ignore */ }
+  }
   async function load(openId) {
+    loadStock();
     const qs = new URLSearchParams({ q: state.q, date: state.date, store: state.store, status: state.status, page: state.page });
     let data; try { data = await api('/api/admin/orders?' + qs); } catch (e) { if (/401/.test(e.message)) return location.reload(); list.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; return; }
     state.page = data.page;

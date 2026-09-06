@@ -95,15 +95,49 @@ function matchCard(line, map, { editable = true } = {}) {
     <div class="foot">${qty}<span>${money(linePrice(line, map) * line.quantity)} ฿</span></div>
   </div>`;
 }
-function bindMatchControls(root, rerender) {
+function bindMatchControls(root, rerender, { getStock, errEl } = {}) {
   root.addEventListener('click', (e) => {
     const t = e.target.closest('[data-inc],[data-dec],[data-rm]'); if (!t) return;
     const cur = loadCart();
-    if (t.dataset.inc) { const l = cur.find((x) => lineKey(x) === t.dataset.inc); if (l) cartSetQty(t.dataset.inc, Math.min(99, l.quantity + 1)); }
+    if (t.dataset.inc) {
+      const l = cur.find((x) => lineKey(x) === t.dataset.inc);
+      if (l) {
+        const short = getStock ? stockCheck(getStock(), cur, { drink: l.drink_id ? 1 : 0, dessert: l.dessert_id ? 1 : 0 }) : '';
+        if (short) { if (errEl) errEl.textContent = short; return; }
+        if (errEl) errEl.textContent = '';
+        cartSetQty(t.dataset.inc, Math.min(99, l.quantity + 1));
+      }
+    }
     if (t.dataset.dec) { const l = cur.find((x) => lineKey(x) === t.dataset.dec); if (l) cartSetQty(t.dataset.dec, l.quantity - 1); }
     if (t.dataset.rm) cartSetQty(t.dataset.rm, 0);
     rerender();
   });
+}
+
+/* stock: pieces = every drink and every dessert counts as one piece */
+function cartPieces(cart, extra = {}) {
+  const w = { drink: extra.drink || 0, dessert: extra.dessert || 0, total: 0 };
+  for (const l of cart) { if (l.drink_id) w.drink += l.quantity; if (l.dessert_id) w.dessert += l.quantity; }
+  w.total = w.drink + w.dessert; return w;
+}
+/* '' when the cart (plus `extra` pieces) fits in the remaining stock, else a message */
+function stockCheck(stock, cart, extra = {}) {
+  if (!stock || !stock.remaining) return '';
+  const want = cartPieces(cart, extra); const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
+  for (const k of ['total', 'drink', 'dessert']) {
+    const r = stock.remaining[k]; if (r == null || want[k] <= r) continue;
+    return r === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${r} ชิ้น / Only ${r} left`;
+  }
+  return '';
+}
+function stockPill(stock) {
+  if (!stock || !stock.remaining) return '';
+  if (stock.sold_out) return '<span class="note-pill sold"><b>สินค้าหมด</b> Sold out</span>';
+  const parts = [];
+  if (stock.remaining.total != null) parts.push(`เหลือ <b>${stock.remaining.total.toLocaleString('en-US')}</b> ชิ้น`);
+  if (stock.remaining.drink != null) parts.push(`เครื่องดื่ม <b>${stock.remaining.drink.toLocaleString('en-US')}</b>`);
+  if (stock.remaining.dessert != null) parts.push(`ของหวาน <b>${stock.remaining.dessert.toLocaleString('en-US')}</b>`);
+  return parts.length ? `<span class="note-pill th">${parts.join(' · ')}</span>` : '';
 }
 
 /* pick-up chips */
@@ -112,7 +146,7 @@ function storeChips(stores, selected) {
 }
 
 /* submit the cart as an order, then go to the payment page */
-async function submitOrder({ storeId, note, errEl, btn }) {
+async function submitOrder({ storeId, note, errEl, btn, onFail }) {
   errEl.textContent = '';
   const lines = loadCart();
   if (!lines.length) { errEl.textContent = 'ยังไม่มีรายการในตะกร้า / Your cart is empty'; return; }
@@ -122,7 +156,7 @@ async function submitOrder({ storeId, note, errEl, btn }) {
     const order = await api('/api/orders', { method: 'POST', body: { store_id: storeId, note, lines } });
     cartClear(); setNote('');
     location.href = `/pay?order=${encodeURIComponent(order.id)}`;
-  } catch (e) { errEl.textContent = e.message; btn.disabled = false; }
+  } catch (e) { errEl.textContent = e.message; btn.disabled = false; if (onFail) onFail(); }
 }
 
 const STATUS_LABEL = {

@@ -49,6 +49,7 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .item .price{font-weight:700}
 .note-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--r-pill);padding:4px 12px;font-size:13px;background:#fff}
 .note-pill b{font-weight:700}
+.note-pill.sold{background:#000;color:#fff;border-color:#000}
 
 /* match cards */
 .matches{display:flex;gap:24px;flex-wrap:wrap}

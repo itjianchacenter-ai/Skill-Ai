@@ -6,7 +6,7 @@ const out = process.argv[2] || path.join(ROOT, 'dist', 'preview.html');
 const read = (p) => fs.readFileSync(p, 'utf8');
 const css = read(path.join(PUB, 'css/style.css'));
 const menu = JSON.parse(read(path.join(ROOT, 'data/menu.json'))); const stores = JSON.parse(read(path.join(ROOT, 'data/stores.json')));
-const menuPublic = { banner: menu.banner || '', drinks: menu.drinks.filter((x) => x.active !== false), desserts: menu.desserts.filter((x) => x.active !== false) };
+const menuPublic = { banner: menu.banner || '', stock: menu.stock || {}, drinks: menu.drinks.filter((x) => x.active !== false), desserts: menu.desserts.filter((x) => x.active !== false) };
 
 const toPreview = (js) => js
   .replace(/location\.href = /g, "location.hash = '#' + ")

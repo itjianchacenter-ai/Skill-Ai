@@ -62,6 +62,22 @@ function pvView(o, admin) {
 }
 function pvFail(msg) { throw new Error(msg); }
 
+/* stock (same rules as server.js): every non-cancelled order reserves its pieces */
+function pvStockView(d) {
+  const lim = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null);
+  const cfg = PREVIEW_MENU.stock || {}; const limits = { total: lim(cfg.total), drink: lim(cfg.drink), dessert: lim(cfg.dessert) };
+  const used = { drink: 0, dessert: 0, total: 0 };
+  for (const o of d.orders) if (o.status !== 'cancelled') for (const l of o.lines) { if (l.drink_id) used.drink += l.quantity; if (l.dessert_id) used.dessert += l.quantity; }
+  used.total = used.drink + used.dessert;
+  const remaining = {}; for (const k of ['total', 'drink', 'dessert']) remaining[k] = limits[k] == null ? null : Math.max(0, limits[k] - used[k]);
+  return { limits, used, remaining, sold_out: ['total', 'drink', 'dessert'].some((k) => remaining[k] === 0) };
+}
+function pvStockShortfall(d, want) {
+  const { remaining } = pvStockView(d); const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
+  for (const k of ['total', 'drink', 'dessert']) if (remaining[k] != null && want[k] > remaining[k]) return remaining[k] === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${remaining[k]} ชิ้น (สั่ง ${want[k]} ชิ้น) / Only ${remaining[k]} left`;
+  return '';
+}
+
 /* PromptPay QR (tag 29) — same EMVCo layout the server uses */
 function pvCrc16(s) { let c = 0xffff; for (let i = 0; i < s.length; i++) { c ^= s.charCodeAt(i) << 8; for (let j = 0; j < 8; j++) c = (c & 0x8000 ? (c << 1) ^ 0x1021 : c << 1) & 0xffff; } return c.toString(16).toUpperCase().padStart(4, '0'); }
 function pvTag(t, v) { return t + String(v.length).padStart(2, '0') + v; }
@@ -88,7 +104,8 @@ async function api(path, opts = {}) {
   const find = (id) => d.orders.find((o) => o.id === id);
   const own = (id) => { const o = find(id); if (!o || (o.customer_id !== me && !d.admin)) pvFail('ไม่พบคำสั่งซื้อ'); return o; };
   let m;
-  if (p === '/api/menu') return PREVIEW_MENU;
+  if (p === '/api/menu') return { ...PREVIEW_MENU, stock: pvStockView(d) };
+  if (p === '/api/stock') return pvStockView(d);
   if (p === '/api/stores') return PREVIEW_STORES;
   if (p === '/api/config') return { payment_ready: true, slip_auto_verify: false };
   if (p === '/api/orders' && method === 'POST') {
@@ -102,6 +119,8 @@ async function api(path, opts = {}) {
       return { drink_id: drink ? drink.id : '', drink_name: drink ? drink.name_en : '', dessert_id: dessert ? dessert.id : '', dessert_name: dessert ? dessert.name_en : '', quantity: qty, unit_price: unit, line_total: pvMoney(unit * qty) };
     });
     const total = pvMoney(lines.reduce((s, l) => s + l.line_total, 0));
+    const want = lines.reduce((w, r) => { if (r.drink_id) w.drink += r.quantity; if (r.dessert_id) w.dessert += r.quantity; w.total = w.drink + w.dessert; return w; }, { drink: 0, dessert: 0, total: 0 });
+    const short = pvStockShortfall(d, want); if (short) pvFail(short);
     const o = { id: pvUuid(), order_number: pvNextNumber(d), customer_id: me, store_id: store.id, store_name: `${store.brand} - ${store.name}`, total, status: total > 0 ? 'pending' : 'paid', note: String(body.note || '').slice(0, 500), created_at: pvNow(), paid_at: total > 0 ? null : pvNow(), picked_up_at: null, cancelled_at: null, slip_url: '', slip_hash: '', slip_ref: '', slip_amount: null, slip_reason: '', slip_verified: 0, lines };
     d.orders.unshift(o); pvSave(d); return pvView(o);
   }
