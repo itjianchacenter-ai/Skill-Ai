@@ -17,9 +17,10 @@
   const orders = await api('/api/orders');
   if (!orders.length) { list.innerHTML = '<div class="empty">ยังไม่มีประวัติการสั่งซื้อ / No orders yet. <a href="/">Order now</a></div>'; return; }
   list.innerHTML = orders.map((o) => {
-    let extra = '';
-    if (o.status === 'pending') extra = `<div class="actions"><a class="btn" href="/pay?order=${esc(o.id)}">${o.has_slip ? 'อัปโหลดสลิปใหม่ / Re-upload slip' : 'ชำระเงิน / Pay now'}</a></div>`;
-    if (o.status === 'slip_uploaded') extra = '<div class="actions"><span class="th" style="font-size:13px">ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ</span></div>';
+    const printBtn = `<a class="btn ghost" href="/receipt?order=${esc(o.id)}">${ICONS.print} Print <span class="th">/ พิมพ์ใบรายการ</span></a>`;
+    let extra = `<div class="actions">${printBtn}</div>`;
+    if (o.status === 'pending') extra = `<div class="actions"><a class="btn" href="/pay?order=${esc(o.id)}">${o.has_slip ? 'อัปโหลดสลิปใหม่ / Re-upload slip' : 'ชำระเงิน / Pay now'}</a>${printBtn}</div>`;
+    if (o.status === 'slip_uploaded') extra = `<div class="actions"><span class="th" style="font-size:13px">ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ</span>${printBtn}</div>`;
     return orderCard(o, { extra });
   }).join('');
 })();

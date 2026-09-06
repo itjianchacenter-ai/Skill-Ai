@@ -13,6 +13,7 @@ const ICONS = {
   down: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M4 8h16l-8 10L4 8z"/></svg>',
   arrowL: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M11 4l2 2-4 4h11v4H9l4 4-2 2-8-8 8-8z"/></svg>',
   arrowR: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 4l-2 2 4 4H4v4h11l-4 4 2 2 8-8-8-8z"/></svg>',
+  print: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12v5H6V2zm-2 6h16a2 2 0 0 1 2 2v7h-4v5H6v-5H2v-7a2 2 0 0 1 2-2zm4 9v3h8v-3H8zm10-6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>',
   check: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.4-1.4z"/></svg>',
 };
 

@@ -19,7 +19,7 @@ app = app.replace(/async function api\(path, opts = \{\}\) \{[\s\S]*?\n\}\n/, '/
 if (/async function api\(/.test(app)) throw new Error('failed to strip api()');
 app = toPreview(app).replace("'/admin-page' : '/'", "'#/admin-page' : '#/'");
 
-const PAGES = { home: 'index', cart: 'cart', orders: 'orders', stores: 'stores', pay: 'pay', admin: 'admin-page' };
+const PAGES = { home: 'index', cart: 'cart', orders: 'orders', stores: 'stores', pay: 'pay', receipt: 'receipt', admin: 'admin-page' };
 const html = {}, js = {};
 for (const [name, file] of Object.entries(PAGES)) {
   const src = read(path.join(PUB, file + '.html'));
@@ -57,7 +57,7 @@ const PAGE_HTML = ${JSON.stringify(html)};
 const PAGE_JS = {
 ${Object.entries(js).map(([n, code]) => `  ${n}: function () {\n${code}\n  },`).join('\n')}
 };
-const ROUTES = { '/': 'home', '/index': 'home', '/cart': 'cart', '/orders': 'orders', '/stores': 'stores', '/pay': 'pay', '/admin-page': 'admin' };
+const ROUTES = { '/': 'home', '/index': 'home', '/cart': 'cart', '/orders': 'orders', '/stores': 'stores', '/pay': 'pay', '/receipt': 'receipt', '/admin-page': 'admin' };
 function route() {
   const h = (location.hash.replace(/^#/, '') || '/').split('?')[0];
   const name = ROUTES[h] || 'home';

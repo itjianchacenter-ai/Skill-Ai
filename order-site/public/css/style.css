@@ -152,6 +152,28 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .stat b{font-size:20px}
 .slip-thumb{max-width:260px;max-height:340px;border:1px solid var(--line);border-radius:8px;display:block}
 
+/* receipt */
+.receipt{background:#fff;border:1px solid var(--line);border-radius:var(--r-card);padding:28px 32px;max-width:720px}
+.receipt .r-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--line);padding-bottom:12px;margin-bottom:16px}
+.receipt .r-head b{font-size:22px;font-weight:800}
+.receipt table{width:100%;border-collapse:collapse}
+.receipt .r-meta th{text-align:left;font-weight:700;padding:5px 12px 5px 0;width:40%;vertical-align:top}
+.receipt .r-meta td{padding:5px 0}
+.receipt .mono{font-variant-numeric:tabular-nums;font-weight:700;font-size:18px}
+.receipt .r-lines{margin-top:20px}
+.receipt .r-lines th,.receipt .r-lines td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+.receipt .r-lines th{font-size:13px}
+.receipt .r-lines .q{text-align:center;width:60px}
+.receipt .r-lines .p{text-align:right;width:110px;font-variant-numeric:tabular-nums}
+.receipt .r-lines tfoot th{border-bottom:0;border-top:2px solid var(--line);font-size:16px;padding-top:12px}
+.receipt .r-foot{margin:24px 0 0;font-size:13px;color:var(--muted);text-align:center}
+@media print{
+  .no-print,.pv-bar,.site-head{display:none!important}
+  html,body{background:#fff}
+  .wrap{padding:0;max-width:none}
+  .receipt{border:0;padding:0;max-width:none}
+}
+
 /* pay */
 .pay{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 @media (max-width:800px){.pay{grid-template-columns:1fr}}
