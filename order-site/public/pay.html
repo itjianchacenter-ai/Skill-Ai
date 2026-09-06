@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="th">
+<head>
+<title>Payment | JIANCHA x NAVORI</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><link rel="icon" href="data:,">
+</head>
+<body>
+<div class="wrap">
+  <header class="site-head" id="site-head"></header>
+  <div id="order-head"></div>
+  <div class="pay" id="pay"></div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  renderHeader('orders');
+  const id = new URLSearchParams(location.search).get('order');
+  const head = $('#order-head'), pay = $('#pay');
+  let o;
+  try { o = await api('/api/orders/' + encodeURIComponent(id)); } catch (e) { head.innerHTML = '<div class="empty">ไม่พบคำสั่งซื้อ / Order not found. <a href="/orders">Order History</a></div>'; return; }
+  head.innerHTML = orderCard(o, { open: true });
+  bindOrderToggles(head);
+
+  function done(msgTh, msgEn) {
+    pay.innerHTML = `<div class="paybox" style="grid-column:1/-1;text-align:center">${ICONS.check}<h3 style="margin-top:8px">${msgEn}</h3><span class="sub th">${msgTh}</span>
+      <a class="btn" href="/orders">${ICONS.doc} Order History</a></div>`;
+  }
+  if (o.status === 'paid' || o.status === 'picked_up') return done('ชำระเงินเรียบร้อยแล้ว ขอบคุณค่ะ', 'Payment received. Thank you!');
+  if (o.status === 'cancelled') return done('คำสั่งซื้อนี้ถูกยกเลิกแล้ว', 'This order was cancelled.');
+  if (o.status === 'slip_uploaded') return done('ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ', 'Slip received. We are verifying your payment.');
+
+  pay.innerHTML = `
+    <div class="paybox">
+      <h3>1. Scan to pay</h3><span class="sub th">สแกน QR เพื่อชำระเงินผ่านแอปธนาคาร ยอด <b>${money(o.total)} ฿</b></span>
+      <div id="qr-wrap"><div class="qr ph"></div></div>
+      <div class="err" id="qr-err"></div>
+    </div>
+    <div class="paybox">
+      <h3>2. Upload slip</h3><span class="sub th">อัปโหลดสลิปโอนเงินเพื่อยืนยันคำสั่งซื้อ</span>
+      ${o.has_slip && o.slip_reason ? '<div class="err">' + esc(o.slip_reason) + '</div>' : ''}
+      <label class="drop" id="drop"><input type="file" id="slip" accept="image/*" class="hidden"><span id="drop-text">แตะเพื่อเลือกรูปสลิป (jpg / png)<br><small>Tap to choose your slip image</small></span><img id="preview" class="hidden" alt=""></label>
+      <button type="button" class="confirm" id="upload" disabled><b>Submit slip</b><small class="th">ส่งสลิป</small></button>
+      <div class="err" id="up-err"></div>
+    </div>`;
+  try { const q = await api('/api/orders/' + encodeURIComponent(id) + '/qr'); $('#qr-wrap').innerHTML = '<img class="qr" src="' + q.qr_data_url + '" alt="PromptPay QR">'; }
+  catch (e) { $('#qr-err').textContent = e.message; }
+
+  const file = $('#slip');
+  file.addEventListener('change', () => {
+    const f = file.files[0]; $('#upload').disabled = !f; if (!f) return;
+    const img = $('#preview'); img.src = URL.createObjectURL(f); img.classList.remove('hidden'); $('#drop-text').classList.add('hidden');
+  });
+  $('#upload').addEventListener('click', async () => {
+    const f = file.files[0]; if (!f) return; $('#upload').disabled = true; $('#up-err').textContent = '';
+    const fd = new FormData(); fd.append('slip', f);
+    try {
+      const r = await api('/api/orders/' + encodeURIComponent(id) + '/slip', { method: 'POST', body: fd });
+      if (r.status === 'paid') done('ชำระเงินเรียบร้อยแล้ว ขอบคุณค่ะ', 'Payment verified. Thank you!');
+      else if (r.status === 'slip_uploaded') done('ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ', 'Slip received. We are verifying your payment.');
+      else { $('#up-err').textContent = r.reason || 'สลิปไม่ผ่านการตรวจสอบ'; $('#upload').disabled = false; }
+    } catch (e) { $('#up-err').textContent = e.message; $('#upload').disabled = false; }
+  });
+})();
+</script>
+</body>
+</html>

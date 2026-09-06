@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="th">
+<head>
+<title>Admin | JIANCHA x NAVORI</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><link rel="icon" href="data:,">
+</head>
+<body>
+<div class="wrap">
+  <header class="site-head" id="site-head"></header>
+  <div id="app"></div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  const view = new URLSearchParams(location.search).get('view') === 'stores' ? 'stores' : 'orders';
+  renderHeader(view, { admin: true });
+  const app = $('#app');
+  const me = await api('/api/admin/me');
+  if (!me.admin) return renderLogin();
+
+  function renderLogin() {
+    app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">Admin login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน</span>
+      <label>Username</label><input name="username" autocomplete="username" required>
+      <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
+      <button class="confirm" type="submit"><b>Login</b></button><div class="err" id="err"></div></form>`;
+    $('#login').addEventListener('submit', async (e) => {
+      e.preventDefault(); const f = new FormData(e.target);
+      try { await api('/api/admin/login', { method: 'POST', body: { username: f.get('username'), password: f.get('password') } }); location.reload(); }
+      catch (err) { $('#err').textContent = err.message; }
+    });
+  }
+
+  const stores = await api('/api/stores');
+  const state = { q: '', date: '', store: '', status: view === 'stores' ? 'paid' : '', page: 1 };
+  app.innerHTML = `
+    <div class="toolbar">
+      <input class="search" id="q" placeholder="Order No. / Location">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select class="pill" id="status" style="padding-right:28px">
+          <option value="">All status</option><option value="pending">รอชำระเงิน</option><option value="slip_uploaded">รอตรวจสลิป</option>
+          <option value="paid">ชำระแล้ว</option><option value="picked_up">รับสินค้าแล้ว</option><option value="cancelled">ยกเลิก</option>
+        </select>
+        <label class="pill datepill">${ICONS.cal} <span id="date-label">Date Selection</span><input type="date" id="date"></label>
+        <button type="button" class="pill" id="logout">Logout</button>
+      </div>
+    </div>
+    ${view === 'stores' ? '<div class="chips" id="store-chips" style="margin-bottom:20px"></div>' : ''}
+    <div id="list"></div>
+    <div class="pager"><button type="button" id="prev">${ICONS.arrowL}</button><span class="pg" id="pg">1</span><button type="button" id="next">${ICONS.arrowR}</button></div>`;
+  $('#status').value = state.status;
+  if (view === 'stores') {
+    $('#store-chips').innerHTML = '<button type="button" class="pill on" data-store="">All stores</button>' + storeChips(stores, '');
+    $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
+  }
+  let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value.trim(); state.page = 1; load(); }, 250); });
+  $('#date').addEventListener('change', (e) => { state.date = e.target.value; $('#date-label').textContent = state.date ? fmtDateTime(state.date + 'T00:00').slice(0, 10) : 'Date Selection'; state.page = 1; load(); });
+  $('#status').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; load(); });
+  $('#prev').addEventListener('click', () => { state.page--; load(); });
+  $('#next').addEventListener('click', () => { state.page++; load(); });
+  $('#logout').addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }); location.reload(); });
+
+  const list = $('#list'); bindOrderToggles(list);
+  list.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-action]'); if (!b) return;
+    const id = b.closest('.order').dataset.id; const to = b.dataset.action;
+    if (to === 'cancelled' && !confirm('ยกเลิกคำสั่งซื้อนี้?')) return;
+    b.disabled = true;
+    try { await api('/api/admin/orders/' + id + '/status', { method: 'POST', body: { status: to } }); load(id); }
+    catch (err) { alert(err.message); b.disabled = false; }
+  });
+
+  function adminExtra(o) {
+    const btn = (to, label) => `<button type="button" class="btn ${to === 'cancelled' ? 'ghost' : ''}" data-action="${to}">${label}</button>`;
+    const acts = [];
+    if (o.status === 'pending' || o.status === 'slip_uploaded') acts.push(btn('paid', ICONS.check + ' ยืนยันชำระเงิน'));
+    if (o.status === 'slip_uploaded') acts.push(btn('pending', 'ตีกลับสลิป'));
+    if (o.status === 'paid') acts.push(btn('picked_up', ICONS.store + ' รับสินค้าแล้ว'));
+    if (['pending', 'slip_uploaded', 'paid'].includes(o.status)) acts.push(btn('cancelled', 'ยกเลิก'));
+    const slip = o.slip_url ? `<div style="margin-top:14px"><b style="font-size:13px">สลิป</b> <span style="font-size:12px;color:var(--muted)">${o.slip_verified ? 'ตรวจอัตโนมัติผ่าน' : 'ตรวจด้วยเจ้าหน้าที่'}${o.slip_ref ? ' · ref ' + esc(o.slip_ref) : ''}${o.slip_amount != null ? ' · ' + money(o.slip_amount) + ' ฿' : ''}</span><br><a href="${esc(o.slip_url)}" target="_blank" rel="noopener"><img class="slip-thumb" src="${esc(o.slip_url)}" alt="slip"></a></div>` : '';
+    return slip + '<div class="actions">' + acts.join('') + '</div>';
+  }
+
+  async function load(openId) {
+    const qs = new URLSearchParams({ q: state.q, date: state.date, store: state.store, status: state.status, page: state.page });
+    let data; try { data = await api('/api/admin/orders?' + qs); } catch (e) { if (/401/.test(e.message)) return location.reload(); list.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; return; }
+    state.page = data.page;
+    list.innerHTML = data.rows.map((o) => orderCard(o, { light: true, open: o.id === openId, extra: adminExtra(o) })).join('') || '<div class="empty">ไม่พบคำสั่งซื้อ</div>';
+    $('#pg').textContent = data.page; $('#prev').disabled = data.page <= 1; $('#next').disabled = data.page >= data.pages;
+  }
+  load();
+})();
+</script>
+</body>
+</html>

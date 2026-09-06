@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="th">
+<head>
+<title>JIANCHA x NAVORI | Order</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><link rel="icon" href="data:,">
+</head>
+<body>
+<div class="wrap">
+  <header class="site-head" id="site-head"></header>
+
+  <div class="hero ph" id="hero"></div>
+
+  <div class="menu-cols">
+    <section>
+      <div class="label" id="lbl-drink"></div>
+      <div class="menu-grid" id="drinks"></div>
+    </section>
+    <section>
+      <div class="label" id="lbl-dessert"></div>
+      <div class="menu-grid" id="desserts"></div>
+    </section>
+  </div>
+
+  <section class="section">
+    <div class="row-between">
+      <div class="label" id="lbl-match"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <span class="note-pill"><b>หมายเหตุ:</b> สามารถเลือกจับคู่เองได้</span>
+        <button type="button" class="btn" id="add-match" disabled>+ Add Match</button>
+      </div>
+    </div>
+    <div class="matches" id="matches"></div>
+  </section>
+
+  <section class="section">
+    <div class="label" id="lbl-pickup"></div>
+    <div class="chips" id="stores"></div>
+  </section>
+
+  <section class="section">
+    <div class="label" id="lbl-summary"></div>
+    <div class="summary">
+      <div>
+        <div class="panel"><ul class="lines" id="lines"></ul></div>
+        <div class="notebox"><b>หมายเหตุ</b><textarea id="note" rows="1" placeholder=""></textarea></div>
+      </div>
+      <div>
+        <div class="sumbox blue">
+          <h3>Order Summary</h3><span class="sub th">สรุปราคารวม</span>
+          <hr>
+          <div class="tot"><span class="th">ยอดรวมราคาสินค้า</span><b id="total">0.00 ฿</b></div>
+          <hr>
+          <h3 style="margin-top:14px">Pick-up Location</h3><span class="sub th">สถานที่รับของ</span>
+          <hr>
+          <div class="store" id="store-name">-</div>
+          <hr>
+        </div>
+        <button type="button" class="confirm" id="confirm"><b>Confirm</b><small class="th">ยืนยันคำสั่งซื้อ</small></button>
+        <div class="err" id="err"></div>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  renderHeader('home');
+  $("#lbl-drink").innerHTML = ICONS.drink + " Drink";
+  $('#lbl-dessert').innerHTML = ICONS.dessert + ' Dessert';
+  $('#lbl-match').innerHTML = ICONS.match + ' Your Match';
+  $('#lbl-pickup').innerHTML = ICONS.pin + ' Pick-up Location';
+  $('#lbl-summary').innerHTML = ICONS.tag + ' Order Summary';
+
+  const [menu, stores] = await Promise.all([getMenu(), api('/api/stores')]);
+  const map = menuMap(menu);
+  if (menu.banner) $('#hero').outerHTML = '<img class="hero" style="object-fit:cover;width:calc(100% - 80px)" src="' + esc(menu.banner) + '" alt="">';
+
+  const itemHtml = (kind, x) => `<label class="item">
+      <div class="img ph"></div>
+      <div class="meta"><input type="radio" name="${kind}" value="${esc(x.id)}"><span class="radio"></span>
+        <span class="names"><span class="en">${esc(x.name_en)}</span><span class="th">${esc(x.name_th)}</span></span>
+        <span class="price">${money(x.price)}</span></div></label>`;
+  $('#drinks').innerHTML = menu.drinks.map((x) => itemHtml('drink', x)).join('') || '<div class="empty">ยังไม่มีเมนูเครื่องดื่ม</div>';
+  $('#desserts').innerHTML = menu.desserts.map((x) => itemHtml('dessert', x)).join('') || '<div class="empty">ยังไม่มีเมนูของหวาน</div>';
+
+  const sel = (kind) => ($(`input[name="${kind}"]:checked`) || {}).value || '';
+  const refreshAdd = () => { $('#add-match').disabled = !(sel('drink') || sel('dessert')); };
+  document.addEventListener('change', (e) => { if (e.target.matches('input[type=radio]')) refreshAdd(); });
+  $('#add-match').addEventListener('click', () => {
+    cartAdd(sel('drink'), sel('dessert'), 1);
+    $$('input[type=radio]').forEach((r) => { r.checked = false; }); refreshAdd(); render();
+  });
+
+  $('#note').value = getNote();
+  $('#note').addEventListener('input', (e) => setNote(e.target.value));
+  $('#stores').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (b) { setStore(b.dataset.store); render(); } });
+  bindMatchControls($('#matches'), render);
+
+  function render() {
+    const cart = loadCart(); const storeId = getStore(); const store = stores.find((s) => s.id === storeId);
+    $('#matches').innerHTML = cart.map((l) => matchCard(l, map)).join('') || '<div class="match add">เลือกเครื่องดื่ม / ของหวานด้านบน<br>แล้วกด <b>+ Add Match</b><span class="th">Choose a drink and a dessert, then add your match</span></div>';
+    $('#stores').innerHTML = storeChips(stores, storeId);
+    const lines = cart.map((l) => `<li><span>${esc(lineName(l, map))}</span><span class="n">x ${l.quantity}</span><span class="p">${money(linePrice(l, map) * l.quantity)} ฿</span></li>`);
+    while (lines.length < 5) lines.push('<li class="blank"></li>');
+    $('#lines').innerHTML = lines.join('');
+    const total = cart.reduce((s, l) => s + linePrice(l, map) * l.quantity, 0);
+    $('#total').textContent = money(total) + ' ฿';
+    $('#store-name').textContent = store ? `${store.brand} - ${store.name}` : '-';
+    updateCartBadge();
+  }
+  render();
+  $('#confirm').addEventListener('click', () => submitOrder({ storeId: getStore(), note: $('#note').value, errEl: $('#err'), btn: $('#confirm') }));
+})();
+</script>
+</body>
+</html>

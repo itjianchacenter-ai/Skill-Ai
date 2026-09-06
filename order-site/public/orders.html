@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="th">
+<head>
+<title>Order History | JIANCHA x NAVORI</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><link rel="icon" href="data:,">
+</head>
+<body>
+<div class="wrap">
+  <header class="site-head" id="site-head"></header>
+  <div id="list"></div>
+</div>
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  renderHeader('orders');
+  const list = $('#list'); bindOrderToggles(list);
+  const orders = await api('/api/orders');
+  if (!orders.length) { list.innerHTML = '<div class="empty">ยังไม่มีประวัติการสั่งซื้อ / No orders yet. <a href="/">Order now</a></div>'; return; }
+  list.innerHTML = orders.map((o) => {
+    let extra = '';
+    if (o.status === 'pending') extra = `<div class="actions"><a class="btn" href="/pay?order=${esc(o.id)}">${o.has_slip ? 'อัปโหลดสลิปใหม่ / Re-upload slip' : 'ชำระเงิน / Pay now'}</a></div>`;
+    if (o.status === 'slip_uploaded') extra = '<div class="actions"><span class="th" style="font-size:13px">ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ</span></div>';
+    return orderCard(o, { extra });
+  }).join('');
+})();
+</script>
+</body>
+</html>

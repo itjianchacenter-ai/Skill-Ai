@@ -1,0 +1,35 @@
+{
+  "banner": "",
+  "drinks": [
+    {
+      "id": "D1",
+      "name_en": "Menu Name",
+      "name_th": "ชื่อเมนู ภาษาไทย",
+      "price": 120,
+      "image": ""
+    },
+    {
+      "id": "D2",
+      "name_en": "Menu Name",
+      "name_th": "ชื่อเมนู ภาษาไทย",
+      "price": 135,
+      "image": ""
+    }
+  ],
+  "desserts": [
+    {
+      "id": "S1",
+      "name_en": "Menu Name",
+      "name_th": "ชื่อเมนู ภาษาไทย",
+      "price": 95,
+      "image": ""
+    },
+    {
+      "id": "S2",
+      "name_en": "Menu Name",
+      "name_th": "ชื่อเมนู ภาษาไทย",
+      "price": 110,
+      "image": ""
+    }
+  ]
+}
