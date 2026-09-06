@@ -63,6 +63,7 @@ function renderHeader(active, { admin = false } = {}) {
         <a class="pill ${active === 'stores' ? 'active' : ''}" href="/admin-page?view=stores">${ICONS.store} Store Pick-up Order</a>
        </nav>`
     : `<nav class="nav">
+        ${active === 'home' ? '' : `<a class="pill" href="/" aria-label="Back to homepage">${ICONS.arrowL} Back</a>`}
         <a class="pill" href="/cart">${ICONS.cart} Cart <span class="badge hidden" data-cart-badge></span></a>
         <a class="pill" href="/orders">${ICONS.doc} Order History</a>
         <a class="pill" href="/stores">${ICONS.store} JIANCHA Store Location</a>
