@@ -165,40 +165,9 @@
     : `<span class="note-pill">${ICONS.target} <b>${esc(campaign ? campaign.name : '')}</b></span>`;
   const bindCampaignSelect = () => { const s = $('#campaign-select'); if (s) s.addEventListener('change', (e) => go({ view: state.view, campaign: e.target.value, store: isPickup ? state.store : '' })); };
 
-  /* ───────── Store Pick-up Order: pick All stores or a branch first ───────── */
-  if (isPickup && !state.store) return renderStoreSelect();
-  async function renderStoreSelect() {
-    let byStore = {};
-    try { const s = await api('/api/admin/summary?campaign=' + encodeURIComponent(campaign ? campaign.id : '')); for (const r of s.by_store) byStore[r.store_id] = r; } catch (e) { /* ignore */ }
-    if (!alive()) return;
-    app.innerHTML = `
-      <div class="toolbar">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="search" id="q" placeholder="Store / Location …" style="width:300px">${campaignSelect()}</div>
-        <span class="pill">${ICONS.store} Store Selection</span>
-      </div>
-      <div class="camp-grid" id="store-cards"></div>`;
-    bindCampaignSelect();
-    const sum = (k) => Object.values(byStore).reduce((n, r) => n + (r[k] || 0), 0);
-    const counts = (r) => `<span class="counts"><span><em>${r.to_pickup}</em><small class="th">รอรับสินค้า</small></span><span><em>${r.picked_up}</em><small class="th">รับแล้ว</small></span><span><em>${r.awaiting_review}</em><small class="th">รอตรวจสลิป</small></span><span><em>${r.unpaid}</em><small class="th">ยังไม่จ่าย</small></span></span>`;
-    const draw = (filter = '') => {
-      const f = filter.trim().toLowerCase();
-      const cards = [];
-      if (!f) cards.push(`<div class="camp store-sel all" data-open-store="all"><b>All stores</b>${counts({ to_pickup: sum('to_pickup'), picked_up: sum('picked_up'), awaiting_review: sum('awaiting_review'), unpaid: sum('unpaid') })}<small>${esc(campaign ? campaign.name : '')} · ${sum('total')} orders</small></div>`);
-      for (const s of stores) {
-        if (f && !`${s.brand} ${s.name}`.toLowerCase().includes(f)) continue;
-        const r = byStore[s.id] || { total: 0, to_pickup: 0, picked_up: 0, awaiting_review: 0, unpaid: 0 };
-        cards.push(`<div class="camp store-sel" data-open-store="${esc(s.id)}"><b>${esc(s.brand)} - ${esc(s.name)}</b>${counts(r)}<small>${esc(campaign ? campaign.name : '')} · ${r.total} orders</small></div>`);
-      }
-      $('#store-cards').innerHTML = cards.join('') || '<div class="empty">ไม่พบสาขา</div>';
-    };
-    draw();
-    $('#q').addEventListener('input', (e) => draw(e.target.value));
-    $('#store-cards').addEventListener('click', (e) => { const card = e.target.closest('[data-open-store]'); if (card) go({ view: 'pickup', campaign: campaign ? campaign.id : '', store: card.dataset.openStore }); });
-  }
-
   /* ───────── order lists ───────── */
   if (isPickup && state.store === 'all') state.store = '';
-  if (isPickup && !state.status) state.status = 'paid';
+  if (isPickup && !state.status) state.status = 'paid,picked_up'; // orders that reached the store: waiting for pick-up and already picked up
   if (isSlips && !state.status) state.status = 'slip_uploaded,slip_rejected'; // Slip Issue opens on every slip that needs attention
   const FIN_LABEL = { pending: 'Unpaid', slip_uploaded: 'Paid', paid: 'Approved', slip_rejected: 'On Issue', picked_up: 'Picked up', cancelled: 'Cancelled' };
   const STATUS_OPTIONS = isSlips
@@ -207,7 +176,9 @@
     : [['', 'All status'], ['pending', 'รอชำระเงิน'], ['slip_uploaded', 'รอตรวจสลิป'], ['slip_rejected', 'สลิปไม่ผ่าน'], ['paid', 'ชำระแล้ว'], ['picked_up', 'รับสินค้าแล้ว'], ['cancelled', 'ยกเลิก']];
   const slipSummary = () => (isSlips && campaign ? `<span class="note-pill"><b>Slip issues ${campaign.stats.slip_issues}</b> <span class="th">(รอตรวจ ${campaign.stats.awaiting_review} · On Issue ${campaign.stats.on_issue})</span></span>` : '');
 
-  app.innerHTML = `
+  // Toolbars follow the mock-ups: Order = search + date · Slip Issue = full filters · Store Pick-up Order = branch chips only
+  const datePill = `<label class="pill datepill">${ICONS.cal} <span id="date-label">Date Selection</span><input type="date" id="date"></label>`;
+  const toolbar = isPickup ? '' : isSlips ? `
     <div class="toolbar">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <input class="search" id="q" placeholder="Order No. / Location" value="${esc(state.q)}">
@@ -217,21 +188,27 @@
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <select class="pill" id="status" style="padding-right:28px">${STATUS_OPTIONS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-        <label class="pill datepill">${ICONS.cal} <span id="date-label">Date Selection</span><input type="date" id="date"></label>
+        ${datePill}
       </div>
-    </div>
+    </div>` : `
+    <div class="toolbar">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="search" id="q" placeholder="Order No. / Location" value="${esc(state.q)}">${campaigns.length > 1 ? campaignSelect() : ''}</div>
+      ${datePill}
+    </div>`;
+  app.innerHTML = `
+    ${toolbar}
     ${isPickup ? '<div class="chips" id="store-chips" style="margin-bottom:20px"></div>' : ''}
     <div id="list"></div>
     <div class="pager"><button type="button" id="prev">${ICONS.arrowL}</button><span class="pg" id="pg">1</span><button type="button" id="next">${ICONS.arrowR}</button></div>`;
   bindCampaignSelect();
-  $('#status').value = state.status;
+  if ($('#status')) $('#status').value = state.status;
   if (isPickup) {
-    $('#store-chips').innerHTML = `<button type="button" class="pill ${state.store ? '' : 'on'}" data-store="">All stores</button>` + storeChips(stores, state.store);
+    $('#store-chips').innerHTML = `<button type="button" class="pill ${state.store ? '' : 'on'}" data-store="">All Stores</button>` + storeChips(stores, state.store);
     $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
   }
-  let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value.trim(); state.page = 1; load(); }, 250); });
-  $('#date').addEventListener('change', (e) => { state.date = e.target.value; $('#date-label').textContent = state.date ? fmtDateTime(state.date + 'T00:00').slice(0, 10) : 'Date Selection'; state.page = 1; load(); });
-  $('#status').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; load(); });
+  let t; if ($('#q')) $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value.trim(); state.page = 1; load(); }, 250); });
+  if ($('#date')) $('#date').addEventListener('change', (e) => { state.date = e.target.value; $('#date-label').textContent = state.date ? fmtDateTime(state.date + 'T00:00').slice(0, 10) : 'Date Selection'; state.page = 1; load(); });
+  if ($('#status')) $('#status').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; load(); });
   $('#prev').addEventListener('click', () => { state.page--; load(); });
   $('#next').addEventListener('click', () => { state.page++; load(); });
 
@@ -268,6 +245,7 @@
     };
   }
   async function loadStock() {
+    if (!$('#stock-pill')) return;
     try {
       const st = await api('/api/admin/summary?campaign=' + encodeURIComponent(campaign ? campaign.id : '')); const s = st.stock; const fmt = (n) => (n == null ? '∞' : n.toLocaleString('en-US'));
       const el = $('#stock-pill'); if (!el || !alive()) return;
