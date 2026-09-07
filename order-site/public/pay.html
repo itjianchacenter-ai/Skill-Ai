@@ -28,6 +28,7 @@
   if (o.status === 'paid' || o.status === 'picked_up') return done('ชำระเงินเรียบร้อยแล้ว ขอบคุณค่ะ', 'Payment received. Thank you!');
   if (o.status === 'cancelled') return done('คำสั่งซื้อนี้ถูกยกเลิกแล้ว', 'This order was cancelled.');
   if (o.status === 'slip_uploaded') return done('ได้รับสลิปแล้ว เจ้าหน้าที่กำลังตรวจสอบ', 'Slip received. We are verifying your payment.');
+  // pending or slip_rejected: show the QR again and let the customer (re)upload
 
   pay.innerHTML = `
     <div class="paybox">

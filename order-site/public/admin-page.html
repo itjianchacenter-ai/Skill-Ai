@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-<title>Admin | JIANCHA x NAVORI</title>
+<title>Campaign Page | JIANCHA</title>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><link rel="icon" href="data:,">
 </head>
 <body>
@@ -12,14 +12,22 @@
 <script src="/js/app.js"></script>
 <script>
 (async () => {
-  const view = new URLSearchParams(location.search).get('view') === 'stores' ? 'stores' : 'orders';
-  renderHeader(view, { admin: true });
   const app = $('#app');
+  const params = new URLSearchParams(location.search);
+  const state = { view: params.get('view') || '', campaign: params.get('campaign') || '', q: '', date: '', store: '', status: '', page: 1 };
+  const go = (p) => { const qs = new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([, v]) => v))); location.href = '/admin-page' + (qs.toString() ? '?' + qs : ''); };
+
   const me = await api('/api/admin/me');
-  if (!me.admin) return renderLogin();
+  if (!me.admin) { renderHeader('', { admin: true }); return renderLogin(); }
+  const user = me.user, P = me.permissions;
+  const VIEWS = { accounts: P.accounts, orders: true, slips: P.slip_review, pickup: true };
+  const home = user.role === 'finance' ? 'slips' : (user.role === 'it_admin' ? 'accounts' : 'orders');
+  if (!VIEWS[state.view]) state.view = home;
+  renderHeader(state.view, { admin: true, role: user.role, user });
+  if (state.view === 'slips') state.status = params.get('status') || '';
 
   function renderLogin() {
-    app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">Admin login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน</span>
+    app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">Campaign Page login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน (IT-Admin / Admin / Finance)</span>
       <label>Username</label><input name="username" autocomplete="username" required>
       <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
       <button class="confirm" type="submit"><b>Login</b></button><div class="err" id="err"></div></form>`;
@@ -30,25 +38,151 @@
     });
   }
 
+  /* ───────── campaign selection (first step for order / slip / pick-up views) ───────── */
+  const CAMPAIGN_VIEWS = { orders: 'Order', slips: 'Slip Issue', pickup: 'Store Pick-up Order' };
+  if (state.view in CAMPAIGN_VIEWS && !state.campaign) return renderCampaigns();
+
+  async function renderCampaigns() {
+    const campaigns = await api('/api/admin/campaigns');
+    app.innerHTML = `
+      <div class="toolbar">
+        <input class="search" id="q" placeholder="Campaign / Order No. / Location …" style="width:300px">
+        <span class="pill">${ICONS.target} Campaign Selection</span>
+      </div>
+      <div class="camp-grid" id="camps"></div>
+      <div id="camp-form"></div>`;
+    const draw = (filter = '') => {
+      const f = filter.trim().toLowerCase();
+      const cards = campaigns.filter((c) => !f || c.name.toLowerCase().includes(f) || c.id.includes(f)).map((c) => `
+        <div class="camp ${c.active ? '' : 'inactive'}" data-open="${esc(c.id)}">
+          ${P.campaigns ? `<button type="button" class="wrench" data-edit="${esc(c.id)}" aria-label="แก้ไข">${ICONS.wrench}</button>` : ''}
+          <b>${esc(c.name)}</b>
+          <small>${c.active ? 'Active' : 'Inactive'} · ${c.stats.orders} orders${c.stats.awaiting_review ? ` · <span class="th">รอตรวจสลิป ${c.stats.awaiting_review}</span>` : ''}${c.stock.total != null ? ` · stock ${c.stock_view.used.total}/${c.stock.total}` : ''}</small>
+        </div>`);
+      if (P.campaigns) cards.push(`<div class="camp create" data-create="1"><span class="plus">+</span><b>Create</b><span>new campaign</span></div>`);
+      $('#camps').innerHTML = cards.join('') || '<div class="empty">ไม่พบแคมเปญ</div>';
+      // an order number in the search box jumps straight to that order
+      if (/^\d{6,}$/.test(f)) $('#camps').insertAdjacentHTML('afterbegin', `<div class="camp" data-search="${esc(f)}"><b>${ICONS.doc} Search order ${esc(f)}</b><small>ค้นหาเลขคำสั่งซื้อในทุกแคมเปญ</small></div>`);
+    };
+    draw();
+    $('#q').addEventListener('input', (e) => draw(e.target.value));
+    $('#camps').addEventListener('click', (e) => {
+      const edit = e.target.closest('[data-edit]'); if (edit) return campaignForm(campaigns.find((c) => c.id === edit.dataset.edit));
+      if (e.target.closest('[data-create]')) return campaignForm(null);
+      const s = e.target.closest('[data-search]'); if (s) return go({ view: 'orders', campaign: campaigns[0] ? campaigns[0].id : '', q: s.dataset.search, all: 1 });
+      const card = e.target.closest('[data-open]'); if (card) go({ view: state.view, campaign: card.dataset.open });
+    });
+    function campaignForm(c) {
+      const isNew = !c;
+      $('#camp-form').innerHTML = `<form class="cform" id="cf">
+        <h3 style="margin:0 0 4px">${isNew ? 'Create new campaign' : 'Edit campaign'}</h3><span class="th" style="font-size:13px">${isNew ? 'สร้างแคมเปญใหม่ (เริ่มเป็น Inactive จนกว่าจะเปิดใช้งาน)' : 'แก้ไขแคมเปญ ' + esc(c.name)}</span>
+        <div class="grid2">
+          <label>Campaign name<input name="name" required value="${esc(c ? c.name : '')}" placeholder="JIANCHA x NAVORI"></label>
+          <label>Stock (total pieces)<input name="stock_total" type="number" min="0" value="${c && c.stock.total != null ? c.stock.total : (isNew ? 1000 : '')}" placeholder="ว่าง = ไม่จำกัด"></label>
+          <label>Promo code from<input name="promo_from" type="number" required value="${c ? c.promo_code.from : 2026090001}"></label>
+          <label>Promo code to<input name="promo_to" type="number" required value="${c ? c.promo_code.to : 2026092000}"></label>
+        </div>
+        <label class="chk"><input type="checkbox" name="active" ${c && c.active ? 'checked' : ''}> <span>Active <span class="th">(ใช้แคมเปญนี้บนหน้าเว็บลูกค้า มีได้ครั้งละ 1 แคมเปญ)</span></span></label>
+        <div class="actions"><button class="btn" type="submit">${isNew ? '+ Create' : 'Save'}</button><button class="btn ghost" type="button" id="cf-cancel">Cancel</button></div>
+        <div class="err" id="cf-err"></div></form>`;
+      $('#cf-cancel').addEventListener('click', () => { $('#camp-form').innerHTML = ''; });
+      $('#cf').addEventListener('submit', async (e) => {
+        e.preventDefault(); const f = new FormData(e.target);
+        const body = { name: f.get('name'), stock_total: f.get('stock_total'), promo_from: f.get('promo_from'), promo_to: f.get('promo_to'), active: f.get('active') === 'on' };
+        try { await api(isNew ? '/api/admin/campaigns' : '/api/admin/campaigns/' + encodeURIComponent(c.id), { method: isNew ? 'POST' : 'PATCH', body }); location.reload(); }
+        catch (err) { $('#cf-err').textContent = err.message; }
+      });
+      $('#camp-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  /* ───────── accounts (IT-Admin) ───────── */
+  if (state.view === 'accounts') return renderAccounts();
+  async function renderAccounts() {
+    const ROLE_LABEL = { it_admin: 'IT - Admin', admin: 'Admin', finance: 'Finance' };
+    let users = await api('/api/admin/users');
+    app.innerHTML = `
+      <div class="toolbar"><input class="search" id="q" placeholder="Search …"><button type="button" class="btn" id="new" style="padding:10px 20px;font-size:17px">+ New</button></div>
+      <div id="acc-form"></div>
+      <div class="camp-grid" id="users"></div>`;
+    const draw = (filter = '') => {
+      const f = filter.trim().toLowerCase();
+      $('#users').innerHTML = users.filter((u) => !f || [u.username, u.display_name, u.department, u.role].join(' ').toLowerCase().includes(f)).map((u) => `
+        <div class="acc ${u.active ? '' : 'inactive'}">
+          ${u.id !== user.id ? `<button type="button" class="wrench" data-edit="${esc(u.id)}" aria-label="แก้ไข">${ICONS.wrench}</button>` : ''}
+          <b>${esc(u.display_name || ROLE_LABEL[u.role])}</b>
+          <div><span class="k">username:</span> ${esc(u.username)}</div>
+          <div><span class="k">password:</span> ••••••••</div>
+          <div style="margin-top:8px"><span class="k">department:</span> ${esc(u.department || '-')}</div>
+          <small>${ROLE_LABEL[u.role]}${u.active ? '' : ' · <span class="th">ปิดใช้งาน</span>'}${u.id === user.id ? ' · you' : ''}</small>
+        </div>`).join('') || '<div class="empty">ไม่พบผู้ใช้</div>';
+    };
+    draw();
+    $('#q').addEventListener('input', (e) => draw(e.target.value));
+    $('#new').addEventListener('click', () => accountForm(null));
+    $('#users').addEventListener('click', (e) => { const b = e.target.closest('[data-edit]'); if (b) accountForm(users.find((u) => u.id === b.dataset.edit)); });
+    function accountForm(u) {
+      const isNew = !u;
+      $('#acc-form').innerHTML = `<form class="cform" id="af">
+        <h3 style="margin:0 0 4px">${isNew ? 'New account' : 'Edit account: ' + esc(u.username)}</h3>
+        <div class="grid2">
+          <label>Username<input name="username" ${isNew ? 'required' : 'disabled'} value="${esc(u ? u.username : '')}" pattern="[A-Za-z0-9._\\-]{2,40}"></label>
+          <label>${isNew ? 'Password' : 'New password (leave blank to keep)'}<input name="password" type="password" ${isNew ? 'required' : ''} minlength="6" autocomplete="new-password"></label>
+          <label>Display name<input name="display_name" value="${esc(u ? u.display_name : '')}" placeholder="Finance"></label>
+          <label>Department<input name="department" value="${esc(u ? u.department : '')}" placeholder="Finance"></label>
+          <label>Role<select name="role">${Object.entries(ROLE_LABEL).map(([k, v]) => `<option value="${k}" ${u && u.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+          ${isNew ? '' : `<label class="chk" style="align-self:end"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> <span>Active</span></label>`}
+        </div>
+        <p class="th" style="font-size:13px;margin:8px 0 0;color:var(--muted)">IT-Admin: ทำได้ทุกอย่าง · Admin (Marketing): ดูออเดอร์และรับสินค้า · Finance: ตรวจสลิป Approve / Reject และยกเลิกออเดอร์</p>
+        <div class="actions"><button class="btn" type="submit">${isNew ? '+ Create' : 'Save'}</button><button class="btn ghost" type="button" id="af-cancel">Cancel</button>${isNew ? '' : '<button class="btn ghost" type="button" id="af-delete" style="margin-left:auto">Delete</button>'}</div>
+        <div class="err" id="af-err"></div></form>`;
+      $('#af-cancel').addEventListener('click', () => { $('#acc-form').innerHTML = ''; });
+      if (!isNew) $('#af-delete').addEventListener('click', async () => {
+        if (!confirm(`ลบบัญชี ${u.username}?`)) return;
+        try { await api('/api/admin/users/' + u.id, { method: 'DELETE' }); users = await api('/api/admin/users'); $('#acc-form').innerHTML = ''; draw($('#q').value); } catch (err) { $('#af-err').textContent = err.message; }
+      });
+      $('#af').addEventListener('submit', async (e) => {
+        e.preventDefault(); const f = new FormData(e.target);
+        const body = { display_name: f.get('display_name'), department: f.get('department'), role: f.get('role') };
+        if (f.get('password')) body.password = f.get('password');
+        if (isNew) body.username = f.get('username'); else body.active = f.get('active') === 'on';
+        try { await api(isNew ? '/api/admin/users' : '/api/admin/users/' + u.id, { method: isNew ? 'POST' : 'PATCH', body }); users = await api('/api/admin/users'); $('#acc-form').innerHTML = ''; draw($('#q').value); }
+        catch (err) { $('#af-err').textContent = err.message; }
+      });
+      $('#acc-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  /* ───────── order lists: Order (admin) · Slip Issue (finance) · Store Pick-up Order ───────── */
   const stores = await api('/api/stores');
-  const state = { q: '', date: '', store: '', status: view === 'stores' ? 'paid' : '', page: 1 };
+  const campaigns = await api('/api/admin/campaigns');
+  const campaign = campaigns.find((c) => c.id === state.campaign) || campaigns[0];
+  const isSlips = state.view === 'slips', isPickup = state.view === 'pickup';
+  state.q = params.get('q') || '';
+  if (isPickup && !state.status) state.status = 'paid';
+  const FIN_LABEL = { pending: 'Unpaid', slip_uploaded: 'Paid', paid: 'Approved', slip_rejected: 'On Issue', picked_up: 'Picked up', cancelled: 'Cancelled' };
+  const STATUS_OPTIONS = isSlips
+    ? [['', 'Status'], ['slip_uploaded', 'Paid · รอตรวจ'], ['pending', 'Unpaid'], ['slip_rejected', 'On Issue'], ['paid', 'Approved'], ['picked_up', 'Picked up'], ['cancelled', 'Cancelled']]
+    : isPickup ? [['paid', 'รอรับสินค้า'], ['picked_up', 'รับแล้ว'], ['paid,picked_up', 'ทั้งหมด']]
+    : [['', 'All status'], ['pending', 'รอชำระเงิน'], ['slip_uploaded', 'รอตรวจสลิป'], ['slip_rejected', 'สลิปไม่ผ่าน'], ['paid', 'ชำระแล้ว'], ['picked_up', 'รับสินค้าแล้ว'], ['cancelled', 'ยกเลิก']];
+
   app.innerHTML = `
     <div class="toolbar">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="search" id="q" placeholder="Order No. / Location"><span id="stock-pill"></span></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <select class="pill" id="status" style="padding-right:28px">
-          <option value="">All status</option><option value="pending">รอชำระเงิน</option><option value="slip_uploaded">รอตรวจสลิป</option>
-          <option value="paid">ชำระแล้ว</option><option value="picked_up">รับสินค้าแล้ว</option><option value="cancelled">ยกเลิก</option>
-        </select>
+        <input class="search" id="q" placeholder="Order No. / Location" value="${esc(state.q)}">
+        <span class="note-pill">${ICONS.target} <b>${esc(campaign ? campaign.name : '')}</b></span>
+        <span id="stock-pill"></span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select class="pill" id="status" style="padding-right:28px">${STATUS_OPTIONS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
         <label class="pill datepill">${ICONS.cal} <span id="date-label">Date Selection</span><input type="date" id="date"></label>
-        <button type="button" class="pill" id="logout">Logout</button>
       </div>
     </div>
-    ${view === 'stores' ? '<div class="chips" id="store-chips" style="margin-bottom:20px"></div>' : ''}
+    ${isPickup ? '<div class="chips" id="store-chips" style="margin-bottom:20px"></div>' : ''}
     <div id="list"></div>
     <div class="pager"><button type="button" id="prev">${ICONS.arrowL}</button><span class="pg" id="pg">1</span><button type="button" id="next">${ICONS.arrowR}</button></div>`;
   $('#status').value = state.status;
-  if (view === 'stores') {
+  if (isPickup) {
     $('#store-chips').innerHTML = '<button type="button" class="pill on" data-store="">All stores</button>' + storeChips(stores, '');
     $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
   }
@@ -57,44 +191,51 @@
   $('#status').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; load(); });
   $('#prev').addEventListener('click', () => { state.page--; load(); });
   $('#next').addEventListener('click', () => { state.page++; load(); });
-  $('#logout').addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }); location.reload(); });
 
   const list = $('#list'); bindOrderToggles(list);
   bindCodeActions(list, (updated) => load(updated.id));
   list.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-action]'); if (!b) return;
-    const id = b.closest('.order').dataset.id; const to = b.dataset.action;
-    if (to === 'cancelled' && !confirm('ยกเลิกคำสั่งซื้อนี้?')) return;
+    const id = b.closest('.order').dataset.id; const to = b.dataset.action; const body = { status: to };
+    if (to === 'cancelled' && !confirm('ยกเลิกคำสั่งซื้อนี้? สต๊อกจะถูกคืน')) return;
+    if (to === 'slip_rejected') { const r = prompt('เหตุผลที่ไม่อนุมัติ (ลูกค้าจะเห็นข้อความนี้)', 'ยอดโอนไม่ตรง กรุณาอัปโหลดสลิปใหม่'); if (r == null) return; body.reason = r; }
     b.disabled = true;
-    try { await api('/api/admin/orders/' + id + '/status', { method: 'POST', body: { status: to } }); load(id); }
+    try { await api('/api/admin/orders/' + id + '/status', { method: 'POST', body }); load(id); }
     catch (err) { alert(err.message); b.disabled = false; }
   });
 
-  function adminExtra(o) {
-    const btn = (to, label) => `<button type="button" class="btn ${to === 'cancelled' ? 'ghost' : ''}" data-action="${to}">${label}</button>`;
+  function actionsFor(o) {
+    const btn = (to, label, ghost) => `<button type="button" class="btn ${ghost ? 'ghost' : ''}" data-action="${to}">${label}</button>`;
     const acts = [];
-    if (o.status === 'pending' || o.status === 'slip_uploaded') acts.push(btn('paid', ICONS.check + ' ยืนยันชำระเงิน'));
-    if (o.status === 'slip_uploaded') acts.push(btn('pending', 'ตีกลับสลิป'));
-    if (o.status === 'paid') acts.push(btn('picked_up', ICONS.store + ' รับสินค้าแล้ว'));
-    if (['pending', 'slip_uploaded', 'paid'].includes(o.status)) acts.push(btn('cancelled', 'ยกเลิก'));
-    const slip = o.slip_url ? `<div style="margin-top:14px"><b style="font-size:13px">สลิป</b> <span style="font-size:12px;color:var(--muted)">${o.slip_verified ? 'ตรวจอัตโนมัติผ่าน' : 'ตรวจด้วยเจ้าหน้าที่'}${o.slip_ref ? ' · ref ' + esc(o.slip_ref) : ''}${o.slip_amount != null ? ' · ' + money(o.slip_amount) + ' ฿' : ''}</span><br><a href="${esc(o.slip_url)}" target="_blank" rel="noopener"><img class="slip-thumb" src="${esc(o.slip_url)}" alt="slip"></a></div>` : '';
-    acts.push(`<a class="btn ghost" href="/receipt?order=${esc(o.id)}" target="_blank" rel="noopener">${ICONS.print} Print</a>`);
-    if (codeBox(o)) acts.push(codeBox(o));
+    acts.push(`<a class="btn ghost" href="/receipt?order=${esc(o.id)}" target="_blank" rel="noopener">${ICONS.eye} View PO</a>`);
+    acts.push(`<a class="btn ghost" href="/receipt?order=${esc(o.id)}&print=1" target="_blank" rel="noopener" aria-label="Print">${ICONS.print}</a>`);
+    if (P.slip_review && o.status === 'slip_uploaded') { acts.push(btn('paid', ICONS.check + ' Approve')); acts.push(btn('slip_rejected', 'Reject')); }
+    if (P.slip_review && (o.status === 'pending' || o.status === 'slip_rejected') && o.has_slip) acts.push(btn('paid', ICONS.check + ' Approve'));
+    if (P.pickup && o.status === 'paid') acts.push(btn('picked_up', ICONS.store + ' รับสินค้าแล้ว'));
+    if (P.cancel && ['pending', 'slip_uploaded', 'slip_rejected', 'paid'].includes(o.status)) acts.push(btn('cancelled', 'ยกเลิก', true));
+    if (P.code && codeBox(o)) acts.push(codeBox(o));
+    const slip = o.slip_url ? `<div style="margin-top:14px"><b style="font-size:13px">สลิป</b> <span style="font-size:12px;color:var(--muted)">${o.slip_verified ? 'ตรวจอัตโนมัติผ่าน' : 'ตรวจด้วยเจ้าหน้าที่'}${o.slip_ref ? ' · ref ' + esc(o.slip_ref) : ''}${o.slip_amount != null ? ' · ' + money(o.slip_amount) + ' ฿' : ''}${o.slip_reason ? ' · ' + esc(o.slip_reason) : ''}</span><br><a href="${esc(o.slip_url)}" target="_blank" rel="noopener"><img class="slip-thumb" src="${esc(o.slip_url)}" alt="slip"></a></div>` : '';
     return slip + '<div class="actions">' + acts.join('') + '</div>';
   }
-
+  function headExtras(o) {
+    if (!isSlips) return {};
+    return {
+      badge: `<span class="fin-pill">${FIN_LABEL[o.status] || o.status}</span>`,
+      aside: o.slip_url ? `<a class="slip-mini" href="${esc(o.slip_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><img src="${esc(o.slip_url)}" alt="slip"></a>` : '<span class="slip-mini empty-slip" title="ยังไม่มีสลิป"></span>',
+    };
+  }
   async function loadStock() {
     try {
-      const st = await api('/api/stock'); const fmt = (n) => (n == null ? '∞' : n.toLocaleString('en-US'));
-      $('#stock-pill').innerHTML = `<span class="note-pill ${st.sold_out ? 'sold' : ''}">Stock <b>${fmt(st.used.total)}</b> / ${fmt(st.limits.total)} ชิ้น · เหลือ <b>${fmt(st.remaining.total)}</b></span>`;
+      const st = await api('/api/admin/summary?campaign=' + encodeURIComponent(campaign ? campaign.id : '')); const s = st.stock; const fmt = (n) => (n == null ? '∞' : n.toLocaleString('en-US'));
+      $('#stock-pill').innerHTML = `<span class="note-pill ${s.sold_out ? 'sold' : ''}">Stock <b>${fmt(s.used.total)}</b> / ${fmt(s.limits.total)} · เหลือ <b>${fmt(s.remaining.total)}</b></span>`;
     } catch (e) { /* ignore */ }
   }
   async function load(openId) {
     loadStock();
-    const qs = new URLSearchParams({ q: state.q, date: state.date, store: state.store, status: state.status, page: state.page });
+    const qs = new URLSearchParams({ q: state.q, date: state.date, store: state.store, status: state.status, campaign: params.get('all') ? '' : (campaign ? campaign.id : ''), page: state.page });
     let data; try { data = await api('/api/admin/orders?' + qs); } catch (e) { if (/401/.test(e.message)) return location.reload(); list.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; return; }
     state.page = data.page;
-    list.innerHTML = data.rows.map((o) => orderCard(o, { light: true, open: o.id === openId, extra: adminExtra(o) })).join('') || '<div class="empty">ไม่พบคำสั่งซื้อ</div>';
+    list.innerHTML = data.rows.map((o) => orderCard(o, { light: true, open: o.id === openId, extra: actionsFor(o), ...headExtras(o) })).join('') || '<div class="empty">ไม่พบคำสั่งซื้อ</div>';
     $('#pg').textContent = data.page; $('#prev').disabled = data.page <= 1; $('#next').disabled = data.page >= data.pages;
   }
   load();

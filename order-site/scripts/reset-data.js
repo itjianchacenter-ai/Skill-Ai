@@ -18,7 +18,7 @@ const { db, DB_PATH } = require('../db');
 const before = db.prepare('SELECT COUNT(*) AS n, COUNT(promo_code) AS codes FROM orders').get();
 
 db.transaction(() => {
-  db.exec('DELETE FROM order_lines; DELETE FROM orders; DELETE FROM order_counters; DELETE FROM customers;');
+  db.exec('DELETE FROM order_lines; DELETE FROM orders; DELETE FROM order_counters; DELETE FROM customers;'); // users and campaigns are kept
 })();
 db.exec('VACUUM');
 

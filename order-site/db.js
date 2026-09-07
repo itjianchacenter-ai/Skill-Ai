@@ -1,6 +1,8 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 const DATA_DIR = path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -56,13 +58,68 @@ CREATE TABLE IF NOT EXISTS order_counters (
   day TEXT PRIMARY KEY,                   -- YYYYMMDD
   seq INTEGER NOT NULL DEFAULT 0
 );
+
+-- Back-office accounts. role: it_admin (everything) | admin (marketing, view orders) | finance (approve slips)
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('it_admin', 'admin', 'finance')),
+  display_name TEXT DEFAULT '',
+  department TEXT DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+-- A campaign is what the customer site sells. Exactly one is active at a time.
+CREATE TABLE IF NOT EXISTS campaigns (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 0,
+  stock_total INTEGER,                    -- NULL = unlimited
+  stock_drink INTEGER,
+  stock_dessert INTEGER,
+  promo_from INTEGER NOT NULL DEFAULT 2026090001,
+  promo_to INTEGER NOT NULL DEFAULT 2026092000,
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
 `);
+
+// orders.campaign_id (migration for databases created before campaigns existed)
+if (!db.prepare("SELECT 1 FROM pragma_table_info('orders') WHERE name = 'campaign_id'").get()) {
+  db.exec('ALTER TABLE orders ADD COLUMN campaign_id TEXT');
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_orders_campaign ON orders(campaign_id, created_at DESC)');
 
 // promo_code: 10-digit POS promotion code handed to the customer once the order is paid
 if (!db.prepare("SELECT 1 FROM pragma_table_info('orders') WHERE name = 'promo_code'").get()) {
   db.exec('ALTER TABLE orders ADD COLUMN promo_code TEXT');
 }
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_promo_code ON orders(promo_code) WHERE promo_code IS NOT NULL');
+
+const ROLES = ['it_admin', 'admin', 'finance'];
+const hashPassword = (p) => bcrypt.hashSync(String(p), 10);
+const checkPassword = (p, hash) => { try { return bcrypt.compareSync(String(p), hash); } catch (e) { return false; } };
+
+/** First-run seed: the three back-office accounts and the first campaign. */
+function seedDefaults({ campaign } = {}) {
+  if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) {
+    const ins = db.prepare('INSERT INTO users(id, username, password_hash, role, display_name, department) VALUES (?, ?, ?, ?, ?, ?)');
+    ins.run(crypto.randomUUID(), 'it-admin', hashPassword('jiancha2026'), 'it_admin', 'IT - Admin', 'IT');
+    ins.run(crypto.randomUUID(), 'admin', hashPassword('marketing'), 'admin', 'Admin', 'Marketing');
+    ins.run(crypto.randomUUID(), 'finance', hashPassword('jiancha'), 'finance', 'Finance', 'Finance');
+  }
+  if (db.prepare('SELECT COUNT(*) AS n FROM campaigns').get().n === 0) {
+    const c = campaign || {};
+    db.prepare('INSERT INTO campaigns(id, name, active, stock_total, stock_drink, stock_dessert, promo_from, promo_to) VALUES (?, ?, 1, ?, ?, ?, ?, ?)')
+      .run(c.id || 'jiancha-x-navori', c.name || 'JIANCHA x NAVORI', c.stock_total ?? 1000, c.stock_drink ?? null, c.stock_dessert ?? null, c.promo_from || 2026090001, c.promo_to || 2026092000);
+  }
+  // orders created before campaigns existed belong to the active campaign
+  const active = db.prepare('SELECT id FROM campaigns WHERE active = 1 ORDER BY created_at LIMIT 1').get();
+  if (active) db.prepare('UPDATE orders SET campaign_id = ? WHERE campaign_id IS NULL').run(active.id);
+}
 
 /** Next order number for today (YYYYMMDD + 5 digits), atomic. */
 const nextOrderNumber = db.transaction(() => {
@@ -74,4 +131,4 @@ const nextOrderNumber = db.transaction(() => {
   return `${day}${String(seq).padStart(5, '0')}`;
 });
 
-module.exports = { db, nextOrderNumber, DB_PATH };
+module.exports = { db, nextOrderNumber, DB_PATH, ROLES, hashPassword, checkPassword, seedDefaults };

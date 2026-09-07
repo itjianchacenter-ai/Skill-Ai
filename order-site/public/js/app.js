@@ -14,6 +14,11 @@ const ICONS = {
   arrowL: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M11 4l2 2-4 4h11v4H9l4 4-2 2-8-8 8-8z"/></svg>',
   arrowR: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M13 4l-2 2 4 4H4v4h11l-4 4 2 2 8-8-8-8z"/></svg>',
   ticket: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7zm7 1v8h2V8H9zm4 0v8h2V8h-2z"/></svg>',
+  target: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>',
+  user: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 12c5 0 9 2.5 9 5.5V22H3v-2.5C3 16.5 7 14 12 14z"/></svg>',
+  wrench: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0 5 5L13 18a2.1 2.1 0 0 1-3-3l6.7-6.7z"/><path d="M14.7 6.3L17 4l3 3-2.3 2.3M4 20l3-3"/></svg>',
+  eye: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5c5 0 9 3.5 11 7-2 3.5-6 7-11 7S3 15.5 1 12c2-3.5 6-7 11-7zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>',
+  slip: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 1.6 2.9-.3 1 2.7 2.7 1-.3 2.9L22 12l-1.3 2.1.3 2.9-2.7 1-1 2.7-2.9-.3L12 22l-2.1-1.6-2.9.3-1-2.7-2.7-1 .3-2.9L2 12l1.6-2.1-.3-2.9 2.7-1 1-2.7 2.9.3L12 2z"/></svg>',
   print: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12v5H6V2zm-2 6h16a2 2 0 0 1 2 2v7h-4v5H6v-5H2v-7a2 2 0 0 1 2-2zm4 9v3h8v-3H8zm10-6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>',
   check: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.4-1.4z"/></svg>',
 };
@@ -56,14 +61,24 @@ function updateCartBadge() {
   $$('[data-cart-badge]').forEach((el) => { el.textContent = n; el.classList.toggle('hidden', n === 0); });
 }
 
-function renderHeader(active, { admin = false } = {}) {
+const ROLE_TAG = { it_admin: 'IT-ADMIN', admin: 'ADMIN', finance: 'FINANCE' };
+function renderHeader(active, { admin = false, role = '', user = null } = {}) {
   const el = $('#site-head'); if (!el) return;
-  const brand = `<a class="brand" href="${admin ? '/admin-page' : '/'}"><b>JIANCHA x NAVORI</b>${admin ? '<span class="tag">ADMIN PAGE</span>' : ''}</a>`;
+  const brand = admin
+    ? `<a class="brand" href="/admin-page"><b>JIANCHA Campaign Page</b>${role ? `<span class="tag">${ROLE_TAG[role] || role.toUpperCase()}</span>` : ''}</a>`
+    : `<a class="brand" href="/"><b>JIANCHA x NAVORI</b></a>`;
+  const item = (view, icon, label) => `<a class="pill ${active === view ? 'on' : ''}" href="/admin-page?view=${view}">${icon} ${label}</a>`;
+  const adminNav = () => {
+    const items = [];
+    if (role === 'it_admin') items.push(item('accounts', ICONS.user, 'Account'));
+    if (role === 'it_admin' || role === 'admin') items.push(item('orders', ICONS.doc, 'Order'));
+    if (role === 'it_admin' || role === 'finance') items.push(item('slips', ICONS.slip, 'Slip Issue'));
+    items.push(item('pickup', ICONS.store, 'Store Pick-up Order'));
+    if (user) items.push(`<button type="button" class="pill" id="logout" title="${esc(user.username)}">Logout</button>`);
+    return `<nav class="nav">${items.join('')}</nav>`;
+  };
   const nav = admin
-    ? `<nav class="nav">
-        <a class="pill ${active === 'orders' ? 'active' : ''}" href="/admin-page">${ICONS.doc} Order</a>
-        <a class="pill ${active === 'stores' ? 'active' : ''}" href="/admin-page?view=stores">${ICONS.store} Store Pick-up Order</a>
-       </nav>`
+    ? (role ? adminNav() : '')
     : `<nav class="nav">
         ${active === 'home' ? '' : `<a class="pill" href="/" aria-label="Back to homepage">${ICONS.arrowL} Back</a>`}
         <a class="pill" href="/cart">${ICONS.cart} Cart <span class="badge hidden" data-cart-badge></span></a>
@@ -71,6 +86,7 @@ function renderHeader(active, { admin = false } = {}) {
         <a class="pill" href="/stores">${ICONS.store} JIANCHA Store Location</a>
        </nav>`;
   el.innerHTML = brand + nav;
+  const lo = $('#logout'); if (lo) lo.addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }); location.href = '/admin-page'; });
   updateCartBadge();
 }
 
@@ -162,27 +178,27 @@ async function submitOrder({ storeId, note, errEl, btn, onFail }) {
 }
 
 const STATUS_LABEL = {
-  pending: ['Awaiting payment', 'รอชำระเงิน'], slip_uploaded: ['Verifying slip', 'รอตรวจสอบสลิป'], paid: ['Paid', 'ชำระแล้ว'],
+  pending: ['Awaiting payment', 'รอชำระเงิน'], slip_uploaded: ['Verifying slip', 'รอตรวจสอบสลิป'], paid: ['Paid', 'ชำระแล้ว'], slip_rejected: ['Slip rejected', 'สลิปไม่ผ่าน กรุณาอัปโหลดใหม่'],
   picked_up: ['Picked up', 'รับสินค้าแล้ว'], cancelled: ['Cancelled', 'ยกเลิก'],
 };
 function statusPill(s) { const [en, th] = STATUS_LABEL[s] || [s, '']; return `<span class="status ${esc(s)}">${en}<span class="th">${th}</span></span>`; }
 function fmtDateTime(v) { if (!v) return ''; const d = new Date(String(v).replace(' ', 'T')); if (isNaN(d)) return v; const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 
 /* expandable order card (customer + admin) */
-function orderCard(o, { light = false, open = false, extra = '' } = {}) {
+function orderCard(o, { light = false, open = false, extra = '', badge = '', aside = '' } = {}) {
   const rows = o.lines.map((l) => {
     const name = [l.drink_name, l.dessert_name].filter(Boolean).join(' + ');
     return `<tr><td>${esc(name)}</td><td class="q">x ${l.quantity}</td><td class="p">${money(l.line_total)}</td></tr>`;
   }).join('');
   return `<div class="order" data-id="${esc(o.id)}">
     <button type="button" class="head ${light ? 'light' : ''}" aria-expanded="${open}">
-      <span><span class="t">Order Number: ${esc(o.order_number)}</span><br><span class="s"><b>Pick-up Location:</b> ${esc(o.store_name.replace(/^JIAN CHA - /, ''))}</span></span>
-      <span class="amt">${money(o.total)} ฿ ${open ? ICONS.down : ICONS.right}</span>
+      <span><span class="t">Order Number: ${esc(o.order_number)}</span> ${badge}<br><span class="s"><b>Pick-up Location:</b> ${esc(o.store_name.replace(/^JIAN CHA - /, ''))}</span></span>
+      <span class="amt">${aside}${money(o.total)} ฿ ${open ? ICONS.down : ICONS.right}</span>
     </button>
     <div class="body ${open ? '' : 'hidden'}">
       <table>${rows}</table>
       ${o.note ? `<div class="meta"><span><b>หมายเหตุ:</b> ${esc(o.note)}</span></div>` : ''}
-      <div class="meta"><span>${fmtDateTime(o.created_at)}</span>${statusPill(o.status)}${o.slip_reason && ['pending', 'slip_uploaded'].includes(o.status) && o.has_slip ? `<span>${esc(o.slip_reason)}</span>` : ''}</div>
+      <div class="meta"><span>${fmtDateTime(o.created_at)}</span>${statusPill(o.status)}${o.slip_reason && ['pending', 'slip_uploaded', 'slip_rejected'].includes(o.status) && o.has_slip ? `<span>${esc(o.slip_reason)}</span>` : ''}</div>
       ${extra}
     </div>
   </div>`;
@@ -210,6 +226,6 @@ function bindOrderToggles(root) {
     const head = e.target.closest('.order > .head'); if (!head) return;
     const body = head.nextElementSibling; const open = body.classList.toggle('hidden');
     head.setAttribute('aria-expanded', String(!open));
-    head.querySelector('.amt').innerHTML = `${head.querySelector('.amt').textContent.trim()} ${open ? ICONS.right : ICONS.down}`;
+    const svg = head.querySelector('.amt svg.ic:last-child'); if (svg) svg.outerHTML = open ? ICONS.right : ICONS.down;
   });
 }
