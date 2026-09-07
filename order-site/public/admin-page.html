@@ -83,7 +83,7 @@
         <div class="camp ${c.active ? '' : 'inactive'}" data-open="${esc(c.id)}">
           ${P.campaigns ? `<button type="button" class="wrench" data-edit="${esc(c.id)}" aria-label="แก้ไข">${ICONS.wrench}</button>` : ''}
           <b>${esc(c.name)}</b>
-          <small>${c.active ? 'Active' : 'Inactive'} · ${c.stats.orders} orders${c.stats.awaiting_review ? ` · <span class="th">รอตรวจสลิป ${c.stats.awaiting_review}</span>` : ''}${c.stock.total != null ? ` · stock ${c.stock_view.used.total}/${c.stock.total}` : ''}</small>
+          <small>${c.active ? 'Active' : 'Inactive'} · ${c.stats.orders} orders${c.stats.slip_issues ? ` · <b>Slip issues ${c.stats.slip_issues}</b> <span class="th">(รอตรวจ ${c.stats.awaiting_review} · On Issue ${c.stats.on_issue})</span>` : ''}${c.stock.total != null ? ` · stock ${c.stock_view.used.total}/${c.stock.total}` : ''}</small>
         </div>`);
       if (P.campaigns) cards.push(`<div class="camp create" data-create="1"><span class="plus">+</span><b>Create</b><span>new campaign</span></div>`);
       $('#camps').innerHTML = cards.join('') || (storeHits ? '' : '<div class="empty">ไม่พบแคมเปญ</div>');
@@ -193,9 +193,10 @@
   state.q = params.get('q') || '';
   state.store = params.get('store') || '';
   if (isPickup && !state.status) state.status = 'paid';
+  if (isSlips && !state.status) state.status = 'slip_uploaded,slip_rejected'; // Slip Issue opens on every slip that needs attention
   const FIN_LABEL = { pending: 'Unpaid', slip_uploaded: 'Paid', paid: 'Approved', slip_rejected: 'On Issue', picked_up: 'Picked up', cancelled: 'Cancelled' };
   const STATUS_OPTIONS = isSlips
-    ? [['', 'Status'], ['slip_uploaded', 'Paid · รอตรวจ'], ['pending', 'Unpaid'], ['slip_rejected', 'On Issue'], ['paid', 'Approved'], ['picked_up', 'Picked up'], ['cancelled', 'Cancelled']]
+    ? [['slip_uploaded,slip_rejected', 'Slip issues · ทั้งหมดที่มีปัญหา'], ['slip_uploaded', 'Paid · รอตรวจ'], ['slip_rejected', 'On Issue'], ['pending', 'Unpaid'], ['paid', 'Approved'], ['picked_up', 'Picked up'], ['cancelled', 'Cancelled'], ['', 'All status']]
     : isPickup ? [['paid', 'รอรับสินค้า'], ['picked_up', 'รับแล้ว'], ['paid,picked_up', 'ทั้งหมด']]
     : [['', 'All status'], ['pending', 'รอชำระเงิน'], ['slip_uploaded', 'รอตรวจสลิป'], ['slip_rejected', 'สลิปไม่ผ่าน'], ['paid', 'ชำระแล้ว'], ['picked_up', 'รับสินค้าแล้ว'], ['cancelled', 'ยกเลิก']];
 

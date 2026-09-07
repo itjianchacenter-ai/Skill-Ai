@@ -99,7 +99,8 @@ function pvStockShortfall(d, c, want) {
 }
 function pvCampaignStats(d, c) {
   const os = d.orders.filter((o) => o.campaign_id === c.id && o.status !== 'cancelled');
-  return { ...c, stats: { orders: os.length, paid_amount: os.filter((o) => ['paid', 'picked_up'].includes(o.status)).reduce((s, o) => s + o.total, 0), awaiting_review: os.filter((o) => o.status === 'slip_uploaded').length }, stock_view: pvStockView(d, c) };
+  const awaiting = os.filter((o) => o.status === 'slip_uploaded').length, onIssue = os.filter((o) => o.status === 'slip_rejected').length;
+  return { ...c, stats: { orders: os.length, paid_amount: os.filter((o) => ['paid', 'picked_up'].includes(o.status)).reduce((s, o) => s + o.total, 0), awaiting_review: awaiting, on_issue: onIssue, slip_issues: awaiting + onIssue }, stock_view: pvStockView(d, c) };
 }
 const pvLim = (v) => (v == null || v === '' ? null : (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : null));
 const pvSlug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'campaign';

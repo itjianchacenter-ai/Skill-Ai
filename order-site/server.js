@@ -361,8 +361,9 @@ app.delete('/api/admin/users/:id', requirePerm('accounts'), (req, res) => {
 // Campaigns (everyone can list; it_admin manages)
 function campaignStats(c) {
   const s = db.prepare(`SELECT COUNT(*) AS orders, COALESCE(SUM(CASE WHEN status IN ('paid','picked_up') THEN total ELSE 0 END), 0) AS paid_amount,
-                        SUM(CASE WHEN status = 'slip_uploaded' THEN 1 ELSE 0 END) AS awaiting_review FROM orders WHERE campaign_id = ? AND status <> 'cancelled'`).get(c.id);
-  return { ...campaignView(c), stats: { orders: s.orders, paid_amount: s.paid_amount, awaiting_review: s.awaiting_review || 0 }, stock_view: stockView(c) };
+                        SUM(CASE WHEN status = 'slip_uploaded' THEN 1 ELSE 0 END) AS awaiting_review,
+                        SUM(CASE WHEN status = 'slip_rejected' THEN 1 ELSE 0 END) AS on_issue FROM orders WHERE campaign_id = ? AND status <> 'cancelled'`).get(c.id);
+  return { ...campaignView(c), stats: { orders: s.orders, paid_amount: s.paid_amount, awaiting_review: s.awaiting_review || 0, on_issue: s.on_issue || 0, slip_issues: (s.awaiting_review || 0) + (s.on_issue || 0) }, stock_view: stockView(c) };
 }
 app.get('/api/admin/campaigns', requireAdmin, (req, res) => {
   res.json(db.prepare('SELECT * FROM campaigns ORDER BY active DESC, created_at DESC').all().map(campaignStats));

@@ -24,7 +24,7 @@
 |---|---|---|---|
 | `it-admin` | `jiancha2026` | IT-Admin | ทุกอย่าง: จัดการบัญชี (Account), สร้าง/แก้ไข/เปิดใช้แคมเปญ, ดูออเดอร์, ตรวจสลิป, รับสินค้า, ยกเลิก |
 | `admin` | `marketing` | Admin (Marketing) | ดูออเดอร์ทุกรายการ (Order), Store Pick-up Order, กดรับสินค้าแล้ว, ออกรหัสโปรโมชัน |
-| `finance` | `jiancha` | Finance | Slip Issue: ดูสลิป Approve / Reject (พร้อมเหตุผลที่ลูกค้าเห็น), ยกเลิกออเดอร์, Store Pick-up Order |
+| `finance` | `jiancha` | Finance | Slip Issue: เปิดมาแสดงสลิปที่มีปัญหาทั้งหมด (รอตรวจ + On Issue) ดูสลิป Approve / Reject (พร้อมเหตุผลที่ลูกค้าเห็น), ยกเลิกออเดอร์, Store Pick-up Order |
 
 - บัญชีเก็บในฐานข้อมูล (รหัสผ่านเข้ารหัสด้วย bcrypt) IT-Admin เพิ่ม/แก้ไข/ปิด/ลบบัญชีได้ในหน้า Account และทุกคนเปลี่ยนรหัสผ่านตัวเองได้ผ่าน API `/api/admin/me/password`
 - **เปลี่ยนรหัสผ่านทั้ง 3 บัญชีก่อนขึ้น production**
