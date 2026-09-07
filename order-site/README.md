@@ -26,7 +26,7 @@
 | `admin` | `marketing` | Admin (Marketing) | ดูออเดอร์ทุกรายการ (Order), ดู Slip Issue, Store Pick-up Order, กดรับสินค้าแล้ว, ออกรหัสโปรโมชัน |
 | `finance` | `jiancha` | Finance | เหมือน Admin และเพิ่ม: Approve / Reject สลิปใน Slip Issue (พร้อมเหตุผลที่ลูกค้าเห็น), ยกเลิกออเดอร์ |
 
-ทุกบัญชีมีเมนู Order · Slip Issue · Store Pick-up Order เหมือนกัน (IT-Admin มี Account เพิ่ม) หน้าแรกคือหน้า Campaign (การ์ดแคมเปญ) และมีปุ่ม Back กลับหน้าแรกเมื่ออยู่ในเมนูใดก็ตาม
+ทุกบัญชีมีเมนู Order · Slip Issue · Store Pick-up Order เหมือนกัน (IT-Admin มี Account เพิ่ม) หน้าแรกคือหน้า Campaign (การ์ดแคมเปญ) สำหรับ Admin และ Finance หน้าแรกไม่มีแถบเมนู เมนู (Back / Order / Slip Issue / Store Pick-up Order / Logout) จะปรากฏเมื่อกดเข้าแคมเปญ และมีปุ่ม Back กลับหน้าแรกเมื่ออยู่ในเมนูใดก็ตาม
 
 - **Order**: รายการออเดอร์ทั้งหมดของแคมเปญที่ Active ทันที มีช่องค้นหา (เลขออเดอร์/สาขา) และ Date Selection (สลับแคมเปญได้เมื่อมีหลายแคมเปญ)
 - **Slip Issue**: รายการสลิปที่มีปัญหาทั้งหมด (รอตรวจ + On Issue) พร้อมตัวเลขสรุป ตัวกรอง Status เลือกดูสถานะอื่นได้

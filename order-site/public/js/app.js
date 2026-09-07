@@ -62,7 +62,7 @@ function updateCartBadge() {
 }
 
 const ROLE_TAG = { it_admin: 'IT-ADMIN', admin: 'ADMIN', finance: 'FINANCE' };
-function renderHeader(active, { admin = false, role = '', user = null } = {}) {
+function renderHeader(active, { admin = false, role = '', user = null, hideNav = false } = {}) {
   const el = $('#site-head'); if (!el) return;
   const brand = admin
     ? `<a class="brand" href="/admin-page"><b>JIANCHA Campaign Page</b>${role ? `<span class="tag">${ROLE_TAG[role] || role.toUpperCase()}</span>` : ''}</a>`
@@ -80,7 +80,7 @@ function renderHeader(active, { admin = false, role = '', user = null } = {}) {
     return `<nav class="nav">${items.join('')}</nav>`;
   };
   const nav = admin
-    ? (role ? adminNav() : '')
+    ? (role && !hideNav ? adminNav() : '')
     : `<nav class="nav">
         ${active === 'home' ? '' : `<a class="pill" href="/" aria-label="Back to homepage">${ICONS.arrowL} Back</a>`}
         <a class="pill" href="/cart">${ICONS.cart} Cart <span class="badge hidden" data-cart-badge></span></a>

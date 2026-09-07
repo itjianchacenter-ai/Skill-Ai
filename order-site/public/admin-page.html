@@ -26,7 +26,8 @@
   // '' = home (campaign page). Every role sees Order / Slip Issue / Store Pick-up Order; IT-Admin also Account.
   const VIEWS = { '': true, accounts: P.accounts, orders: true, slips: true, pickup: true };
   if (!VIEWS[state.view]) state.view = '';
-  renderHeader(state.view, { admin: true, role: user.role, user });
+  // Marketing and Finance land on a bare campaign page: the menu appears once they open a campaign. IT-Admin keeps the menu (Account lives there).
+  renderHeader(state.view, { admin: true, role: user.role, user, hideNav: state.view === '' && user.role !== 'it_admin' });
 
   function renderLogin() {
     app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">Campaign Page login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน (IT-Admin / Admin / Finance)</span>
