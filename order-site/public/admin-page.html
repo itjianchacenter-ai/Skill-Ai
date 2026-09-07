@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-<title>Campaign Page | JIANCHA</title>
+<title>JIAN CHA Page</title>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css"><link rel="icon" href="data:,">
 </head>
 <body>
@@ -30,7 +30,7 @@
   renderHeader(state.view, { admin: true, role: user.role, user, hideNav: state.view === '' && user.role !== 'it_admin' });
 
   function renderLogin() {
-    app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">Campaign Page login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน (IT-Admin / Admin / Finance)</span>
+    app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">JIAN CHA Page login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน (IT-Admin / Admin / Finance)</span>
       <label>Username</label><input name="username" autocomplete="username" required>
       <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
       <button class="confirm" type="submit"><b>Login</b></button><div class="err" id="err"></div></form>`;

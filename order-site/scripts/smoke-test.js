@@ -138,7 +138,7 @@ const login = (who, username, password) => call(who, 'POST', '/api/admin/login',
     r = await call('it', 'GET', '/api/admin/summary?campaign=jiancha-x-navori'); check('summary per campaign', r.status === 200 && r.json.stock.remaining.total === 990);
 
     r = await call('it', 'POST', '/api/admin/logout'); r = await call('it', 'GET', '/api/admin/orders'); check('logout works', r.status === 401);
-    r = await fetch(base + '/admin-page'); check('admin page served', r.status === 200 && /Campaign Page/.test(await r.text()));
+    r = await fetch(base + '/admin-page'); check('admin page served', r.status === 200 && /JIAN CHA Page/.test(await r.text()));
     r = await fetch(base + '/cart'); check('extensionless page served', r.status === 200);
   } finally {
     server.close();

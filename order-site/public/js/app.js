@@ -65,7 +65,7 @@ const ROLE_TAG = { it_admin: 'IT-ADMIN', admin: 'ADMIN', finance: 'FINANCE' };
 function renderHeader(active, { admin = false, role = '', user = null, hideNav = false } = {}) {
   const el = $('#site-head'); if (!el) return;
   const brand = admin
-    ? `<a class="brand" href="/admin-page"><b>JIANCHA Campaign Page</b>${role ? `<span class="tag">${ROLE_TAG[role] || role.toUpperCase()}</span>` : ''}</a>`
+    ? `<a class="brand" href="/admin-page"><b>JIAN CHA Page</b>${role ? `<span class="tag">${ROLE_TAG[role] || role.toUpperCase()}</span>` : ''}</a>`
     : `<a class="brand" href="/"><b>JIANCHA x NAVORI</b></a>`;
   const item = (view, icon, label) => `<a class="pill ${active === view ? 'on' : ''}" href="/admin-page?view=${view}">${icon} ${label}</a>`;
   const adminNav = () => {
