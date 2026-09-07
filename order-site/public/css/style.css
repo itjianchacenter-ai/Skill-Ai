@@ -190,6 +190,8 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .camp.create b{font-size:18px}
 .camp:hover,.acc:hover{border-color:#000}
 .camp.store-sel{min-height:170px;padding:20px 18px}
+.camp.store-sel.all{background:#000;color:#fff;border-color:#000}
+.camp.store-sel.all small,.camp.store-sel.all .counts small{color:#cfcfcf}
 .camp.store-sel b{font-size:20px}
 .camp.store-sel .counts{display:flex;gap:18px;margin-top:14px}
 .camp.store-sel .counts>span{display:flex;flex-direction:column;align-items:center;min-width:56px}

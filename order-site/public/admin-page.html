@@ -16,18 +16,17 @@
   // In the single-file preview the page is re-run on every hash change; stop stale async renders.
   const token = Symbol('page'); window.__pageToken = token; const alive = () => window.__pageToken === token;
   const params = new URLSearchParams(location.search);
-  const state = { view: params.get('view') || '', campaign: params.get('campaign') || '', q: '', date: '', store: '', status: '', page: 1 };
+  const state = { view: params.get('view') || '', campaign: params.get('campaign') || '', store: params.get('store') || '', q: params.get('q') || '', date: '', status: params.get('status') || '', page: 1 };
   const go = (p) => { const qs = new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([, v]) => v))); location.href = '/admin-page' + (qs.toString() ? '?' + qs : ''); };
 
   const me = await api('/api/admin/me');
   if (!alive()) return;
   if (!me.admin) { renderHeader('', { admin: true }); return renderLogin(); }
   const user = me.user, P = me.permissions;
-  const VIEWS = { accounts: P.accounts, orders: true, slips: true, pickup: true }; // Slip Issue is the same list for every role; approve/reject stay permission-gated
-  const home = 'orders'; // every role lands on the campaign page
-  if (!VIEWS[state.view]) state.view = home;
+  // '' = home (campaign page). Every role sees Order / Slip Issue / Store Pick-up Order; IT-Admin also Account.
+  const VIEWS = { '': true, accounts: P.accounts, orders: true, slips: true, pickup: true };
+  if (!VIEWS[state.view]) state.view = '';
   renderHeader(state.view, { admin: true, role: user.role, user });
-  if (state.view === 'slips') state.status = params.get('status') || '';
 
   function renderLogin() {
     app.innerHTML = `<form class="login" id="login"><h3 style="margin:0">Campaign Page login</h3><span class="th" style="font-size:13px">เข้าสู่ระบบหลังบ้าน (IT-Admin / Admin / Finance)</span>
@@ -41,66 +40,38 @@
     });
   }
 
-  /* ───────── campaign selection (first step for order / slip / pick-up views) ───────── */
-  const CAMPAIGN_VIEWS = { orders: 'Order', slips: 'Slip Issue', pickup: 'Store Pick-up Order' };
-  if (state.view in CAMPAIGN_VIEWS && !state.campaign) return renderCampaigns();
-
+  /* ───────── home: campaign page ───────── */
+  if (state.view === '') return renderCampaigns();
   async function renderCampaigns() {
-    const [campaigns, stores] = await Promise.all([api('/api/admin/campaigns'), api('/api/stores')]);
-    // per-store order counts of the active campaign (first card) so each JIANCHA branch can be opened directly
-    const primary = campaigns.find((c) => c.active) || campaigns[0];
-    let byStore = {};
-    if (primary) { try { const s = await api('/api/admin/summary?campaign=' + encodeURIComponent(primary.id)); for (const r of s.by_store) byStore[r.store_id] = r; } catch (e) { /* ignore */ } }
+    const campaigns = await api('/api/admin/campaigns');
     if (!alive()) return;
     app.innerHTML = `
       <div class="toolbar">
-        <input class="search" id="q" placeholder="Campaign / Order No. / Location …" style="width:300px">
+        <input class="search" id="q" placeholder="Campaign / Order No. …" style="width:300px">
         <span class="pill">${ICONS.target} Campaign Selection</span>
       </div>
       <div class="camp-grid" id="camps"></div>
-      <div id="camp-form"></div>
-      <div class="label" id="stores-label">${ICONS.store} JIANCHA Store <span class="th" style="font-weight:400">· เลือกสาขาเพื่อดูออเดอร์ของสาขานั้น</span></div>
-      <div class="camp-grid" id="store-cards"></div>`;
-    const drawStores = (f) => {
-      const cards = stores.filter((s) => !f || `${s.brand} ${s.name}`.toLowerCase().includes(f)).map((s) => {
-        const r = byStore[s.id] || { total: 0, to_pickup: 0, picked_up: 0, awaiting_review: 0, unpaid: 0 };
-        return `<div class="camp store-sel" data-open-store="${esc(s.id)}">
-          <b>${esc(s.brand)} - ${esc(s.name)}</b>
-          <span class="counts"><span><em>${r.to_pickup}</em><small class="th">รอรับสินค้า</small></span><span><em>${r.picked_up}</em><small class="th">รับแล้ว</small></span><span><em>${r.awaiting_review}</em><small class="th">รอตรวจสลิป</small></span><span><em>${r.unpaid}</em><small class="th">ยังไม่จ่าย</small></span></span>
-          <small>${primary ? esc(primary.name) + ' · ' : ''}${r.total} orders</small>
-        </div>`;
-      });
-      const el = $('#store-cards'); if (!el) return 0; // page already navigated away
-      el.innerHTML = cards.join('') || '<div class="empty">ไม่พบสาขา</div>';
-      $('#stores-label').style.display = cards.length ? '' : 'none';
-      return cards.length;
-    };
+      <div id="camp-form"></div>`;
     const draw = (filter = '') => {
       const f = filter.trim().toLowerCase();
-      const storeHits = drawStores(f);
-      if (!$('#camps')) return;
       const cards = campaigns.filter((c) => !f || c.name.toLowerCase().includes(f) || c.id.includes(f)).map((c) => `
         <div class="camp ${c.active ? '' : 'inactive'}" data-open="${esc(c.id)}">
           ${P.campaigns ? `<button type="button" class="wrench" data-edit="${esc(c.id)}" aria-label="แก้ไข">${ICONS.wrench}</button>` : ''}
           <b>${esc(c.name)}</b>
-          <small>${c.active ? 'Active' : 'Inactive'} · ${c.stats.orders} orders${c.stats.slip_issues ? ` · <b>Slip issues ${c.stats.slip_issues}</b> <span class="th">(รอตรวจ ${c.stats.awaiting_review} · On Issue ${c.stats.on_issue})</span>` : ''}${c.stock.total != null ? ` · stock ${c.stock_view.used.total}/${c.stock.total}` : ''}</small>
+          <small>${c.active ? 'Active' : 'Inactive'} · ${c.stats.orders} orders${c.stock.total != null ? ` · stock ${c.stock_view.used.total}/${c.stock.total}` : ''}</small>
         </div>`);
       if (P.campaigns) cards.push(`<div class="camp create" data-create="1"><span class="plus">+</span><b>Create</b><span>new campaign</span></div>`);
-      $('#camps').innerHTML = cards.join('') || (storeHits ? '' : '<div class="empty">ไม่พบแคมเปญ</div>');
-      // an order number in the search box jumps straight to that order
-      if (/^\d{6,}$/.test(f)) $('#camps').insertAdjacentHTML('afterbegin', `<div class="camp" data-search="${esc(f)}"><b>${ICONS.doc} Search order ${esc(f)}</b><small>ค้นหาเลขคำสั่งซื้อในทุกแคมเปญ</small></div>`);
+      // an order number in the search box jumps straight to that order (all campaigns)
+      if (/^\d{6,}$/.test(f)) cards.unshift(`<div class="camp" data-search="${esc(f)}"><b>${ICONS.doc} Search order ${esc(f)}</b><small>ค้นหาเลขคำสั่งซื้อในทุกแคมเปญ</small></div>`);
+      $('#camps').innerHTML = cards.join('') || '<div class="empty">ไม่พบแคมเปญ</div>';
     };
     draw();
     $('#q').addEventListener('input', (e) => draw(e.target.value));
     $('#camps').addEventListener('click', (e) => {
       const edit = e.target.closest('[data-edit]'); if (edit) return campaignForm(campaigns.find((c) => c.id === edit.dataset.edit));
       if (e.target.closest('[data-create]')) return campaignForm(null);
-      const s = e.target.closest('[data-search]'); if (s) return go({ view: 'orders', campaign: campaigns[0] ? campaigns[0].id : '', q: s.dataset.search, all: 1 });
-      const card = e.target.closest('[data-open]'); if (card) go({ view: state.view, campaign: card.dataset.open });
-    });
-    $('#store-cards').addEventListener('click', (e) => {
-      const card = e.target.closest('[data-open-store]'); if (!card || !primary) return;
-      go({ view: state.view === 'slips' ? 'slips' : (state.view === 'orders' ? 'orders' : 'pickup'), campaign: primary.id, store: card.dataset.openStore });
+      const s = e.target.closest('[data-search]'); if (s) return go({ view: 'orders', q: s.dataset.search, all: 1 });
+      const card = e.target.closest('[data-open]'); if (card) go({ view: 'orders', campaign: card.dataset.open });
     });
     function campaignForm(c) {
       const isNew = !c;
@@ -164,7 +135,7 @@
           <label>Role<select name="role">${Object.entries(ROLE_LABEL).map(([k, v]) => `<option value="${k}" ${u && u.role === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           ${isNew ? '' : `<label class="chk" style="align-self:end"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> <span>Active</span></label>`}
         </div>
-        <p class="th" style="font-size:13px;margin:8px 0 0;color:var(--muted)">IT-Admin: ทำได้ทุกอย่าง · Admin (Marketing): ดูออเดอร์และรับสินค้า · Finance: ตรวจสลิป Approve / Reject และยกเลิกออเดอร์</p>
+        <p class="th" style="font-size:13px;margin:8px 0 0;color:var(--muted)">IT-Admin: ทำได้ทุกอย่าง · Admin (Marketing): ดูออเดอร์ สลิป และรับสินค้า · Finance: เพิ่ม Approve / Reject สลิป และยกเลิกออเดอร์</p>
         <div class="actions"><button class="btn" type="submit">${isNew ? '+ Create' : 'Save'}</button><button class="btn ghost" type="button" id="af-cancel">Cancel</button>${isNew ? '' : '<button class="btn ghost" type="button" id="af-delete" style="margin-left:auto">Delete</button>'}</div>
         <div class="err" id="af-err"></div></form>`;
       $('#af-cancel').addEventListener('click', () => { $('#acc-form').innerHTML = ''; });
@@ -184,14 +155,49 @@
     }
   }
 
-  /* ───────── order lists: Order (admin) · Slip Issue (finance) · Store Pick-up Order ───────── */
-  const stores = await api('/api/stores');
-  const campaigns = await api('/api/admin/campaigns');
+  /* ───────── shared context for Order · Slip Issue · Store Pick-up Order ───────── */
+  const [stores, campaigns] = await Promise.all([api('/api/stores'), api('/api/admin/campaigns')]);
   if (!alive()) return;
-  const campaign = campaigns.find((c) => c.id === state.campaign) || campaigns[0];
+  const campaign = campaigns.find((c) => c.id === state.campaign) || campaigns.find((c) => c.active) || campaigns[0];
   const isSlips = state.view === 'slips', isPickup = state.view === 'pickup';
-  state.q = params.get('q') || '';
-  state.store = params.get('store') || '';
+  const campaignSelect = () => campaigns.length > 1
+    ? `<select class="pill" id="campaign-select" style="padding-right:28px">${campaigns.map((c) => `<option value="${esc(c.id)}" ${campaign && c.id === campaign.id ? 'selected' : ''}>${esc(c.name)}${c.active ? '' : ' (inactive)'}</option>`).join('')}</select>`
+    : `<span class="note-pill">${ICONS.target} <b>${esc(campaign ? campaign.name : '')}</b></span>`;
+  const bindCampaignSelect = () => { const s = $('#campaign-select'); if (s) s.addEventListener('change', (e) => go({ view: state.view, campaign: e.target.value, store: isPickup ? state.store : '' })); };
+
+  /* ───────── Store Pick-up Order: pick All stores or a branch first ───────── */
+  if (isPickup && !state.store) return renderStoreSelect();
+  async function renderStoreSelect() {
+    let byStore = {};
+    try { const s = await api('/api/admin/summary?campaign=' + encodeURIComponent(campaign ? campaign.id : '')); for (const r of s.by_store) byStore[r.store_id] = r; } catch (e) { /* ignore */ }
+    if (!alive()) return;
+    app.innerHTML = `
+      <div class="toolbar">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="search" id="q" placeholder="Store / Location …" style="width:300px">${campaignSelect()}</div>
+        <span class="pill">${ICONS.store} Store Selection</span>
+      </div>
+      <div class="camp-grid" id="store-cards"></div>`;
+    bindCampaignSelect();
+    const sum = (k) => Object.values(byStore).reduce((n, r) => n + (r[k] || 0), 0);
+    const counts = (r) => `<span class="counts"><span><em>${r.to_pickup}</em><small class="th">รอรับสินค้า</small></span><span><em>${r.picked_up}</em><small class="th">รับแล้ว</small></span><span><em>${r.awaiting_review}</em><small class="th">รอตรวจสลิป</small></span><span><em>${r.unpaid}</em><small class="th">ยังไม่จ่าย</small></span></span>`;
+    const draw = (filter = '') => {
+      const f = filter.trim().toLowerCase();
+      const cards = [];
+      if (!f) cards.push(`<div class="camp store-sel all" data-open-store="all"><b>All stores</b>${counts({ to_pickup: sum('to_pickup'), picked_up: sum('picked_up'), awaiting_review: sum('awaiting_review'), unpaid: sum('unpaid') })}<small>${esc(campaign ? campaign.name : '')} · ${sum('total')} orders</small></div>`);
+      for (const s of stores) {
+        if (f && !`${s.brand} ${s.name}`.toLowerCase().includes(f)) continue;
+        const r = byStore[s.id] || { total: 0, to_pickup: 0, picked_up: 0, awaiting_review: 0, unpaid: 0 };
+        cards.push(`<div class="camp store-sel" data-open-store="${esc(s.id)}"><b>${esc(s.brand)} - ${esc(s.name)}</b>${counts(r)}<small>${esc(campaign ? campaign.name : '')} · ${r.total} orders</small></div>`);
+      }
+      $('#store-cards').innerHTML = cards.join('') || '<div class="empty">ไม่พบสาขา</div>';
+    };
+    draw();
+    $('#q').addEventListener('input', (e) => draw(e.target.value));
+    $('#store-cards').addEventListener('click', (e) => { const card = e.target.closest('[data-open-store]'); if (card) go({ view: 'pickup', campaign: campaign ? campaign.id : '', store: card.dataset.openStore }); });
+  }
+
+  /* ───────── order lists ───────── */
+  if (isPickup && state.store === 'all') state.store = '';
   if (isPickup && !state.status) state.status = 'paid';
   if (isSlips && !state.status) state.status = 'slip_uploaded,slip_rejected'; // Slip Issue opens on every slip that needs attention
   const FIN_LABEL = { pending: 'Unpaid', slip_uploaded: 'Paid', paid: 'Approved', slip_rejected: 'On Issue', picked_up: 'Picked up', cancelled: 'Cancelled' };
@@ -199,12 +205,14 @@
     ? [['slip_uploaded,slip_rejected', 'Slip issues · ทั้งหมดที่มีปัญหา'], ['slip_uploaded', 'Paid · รอตรวจ'], ['slip_rejected', 'On Issue'], ['pending', 'Unpaid'], ['paid', 'Approved'], ['picked_up', 'Picked up'], ['cancelled', 'Cancelled'], ['', 'All status']]
     : isPickup ? [['paid', 'รอรับสินค้า'], ['picked_up', 'รับแล้ว'], ['paid,picked_up', 'ทั้งหมด']]
     : [['', 'All status'], ['pending', 'รอชำระเงิน'], ['slip_uploaded', 'รอตรวจสลิป'], ['slip_rejected', 'สลิปไม่ผ่าน'], ['paid', 'ชำระแล้ว'], ['picked_up', 'รับสินค้าแล้ว'], ['cancelled', 'ยกเลิก']];
+  const slipSummary = () => (isSlips && campaign ? `<span class="note-pill"><b>Slip issues ${campaign.stats.slip_issues}</b> <span class="th">(รอตรวจ ${campaign.stats.awaiting_review} · On Issue ${campaign.stats.on_issue})</span></span>` : '');
 
   app.innerHTML = `
     <div class="toolbar">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <input class="search" id="q" placeholder="Order No. / Location" value="${esc(state.q)}">
-        <span class="note-pill">${ICONS.target} <b>${esc(campaign ? campaign.name : '')}</b></span>
+        ${campaignSelect()}
+        ${slipSummary()}
         <span id="stock-pill"></span>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -212,12 +220,15 @@
         <label class="pill datepill">${ICONS.cal} <span id="date-label">Date Selection</span><input type="date" id="date"></label>
       </div>
     </div>
-    <div class="chips" id="store-chips" style="margin-bottom:20px"></div>
+    ${isPickup ? '<div class="chips" id="store-chips" style="margin-bottom:20px"></div>' : ''}
     <div id="list"></div>
     <div class="pager"><button type="button" id="prev">${ICONS.arrowL}</button><span class="pg" id="pg">1</span><button type="button" id="next">${ICONS.arrowR}</button></div>`;
+  bindCampaignSelect();
   $('#status').value = state.status;
-  $('#store-chips').innerHTML = `<button type="button" class="pill ${state.store ? '' : 'on'}" data-store="">All stores</button>` + storeChips(stores, state.store);
-  $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
+  if (isPickup) {
+    $('#store-chips').innerHTML = `<button type="button" class="pill ${state.store ? '' : 'on'}" data-store="">All stores</button>` + storeChips(stores, state.store);
+    $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
+  }
   let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value.trim(); state.page = 1; load(); }, 250); });
   $('#date').addEventListener('change', (e) => { state.date = e.target.value; $('#date-label').textContent = state.date ? fmtDateTime(state.date + 'T00:00').slice(0, 10) : 'Date Selection'; state.page = 1; load(); });
   $('#status').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; load(); });
@@ -259,7 +270,7 @@
   async function loadStock() {
     try {
       const st = await api('/api/admin/summary?campaign=' + encodeURIComponent(campaign ? campaign.id : '')); const s = st.stock; const fmt = (n) => (n == null ? '∞' : n.toLocaleString('en-US'));
-      const el = $('#stock-pill'); if (!el) return;
+      const el = $('#stock-pill'); if (!el || !alive()) return;
       el.innerHTML = `<span class="note-pill ${s.sold_out ? 'sold' : ''}">Stock <b>${fmt(s.used.total)}</b> / ${fmt(s.limits.total)} · เหลือ <b>${fmt(s.remaining.total)}</b></span>`;
     } catch (e) { /* ignore */ }
   }
