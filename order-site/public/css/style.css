@@ -65,8 +65,8 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .set-meta .pick .radio{display:block;width:26px;height:26px;border:1px solid var(--line);border-radius:50%;background:#fff;position:relative;cursor:pointer}
 .set-meta .pick input:checked + .radio::after{content:"";position:absolute;inset:6px;border-radius:50%;background:#000}
 .set-meta .names{flex:1;min-width:0;line-height:1.2}
-.set-meta .names .en{font-size:16px;font-weight:500;display:block}
-.set-meta .names .th{font-size:12px;display:block}
+.set-meta .names > .en{font-size:16px;font-weight:500;display:block}
+.set-meta .names > .th{font-size:12px;display:block}
 .set-meta .items,.match .items{margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.5}
 .set-meta .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
 .set-meta .price{font-weight:700;font-size:16px}
