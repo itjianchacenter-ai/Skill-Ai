@@ -66,12 +66,15 @@
           <small>${primary ? esc(primary.name) + ' · ' : ''}${r.total} orders</small>
         </div>`;
       });
-      $('#store-cards').innerHTML = cards.join('') || '<div class="empty">ไม่พบสาขา</div>';
+      const el = $('#store-cards'); if (!el) return 0; // page already navigated away
+      el.innerHTML = cards.join('') || '<div class="empty">ไม่พบสาขา</div>';
       $('#stores-label').style.display = cards.length ? '' : 'none';
+      return cards.length;
     };
     const draw = (filter = '') => {
       const f = filter.trim().toLowerCase();
-      drawStores(f);
+      const storeHits = drawStores(f);
+      if (!$('#camps')) return;
       const cards = campaigns.filter((c) => !f || c.name.toLowerCase().includes(f) || c.id.includes(f)).map((c) => `
         <div class="camp ${c.active ? '' : 'inactive'}" data-open="${esc(c.id)}">
           ${P.campaigns ? `<button type="button" class="wrench" data-edit="${esc(c.id)}" aria-label="แก้ไข">${ICONS.wrench}</button>` : ''}
@@ -79,7 +82,7 @@
           <small>${c.active ? 'Active' : 'Inactive'} · ${c.stats.orders} orders${c.stats.awaiting_review ? ` · <span class="th">รอตรวจสลิป ${c.stats.awaiting_review}</span>` : ''}${c.stock.total != null ? ` · stock ${c.stock_view.used.total}/${c.stock.total}` : ''}</small>
         </div>`);
       if (P.campaigns) cards.push(`<div class="camp create" data-create="1"><span class="plus">+</span><b>Create</b><span>new campaign</span></div>`);
-      $('#camps').innerHTML = cards.join('') || '<div class="empty">ไม่พบแคมเปญ</div>';
+      $('#camps').innerHTML = cards.join('') || (storeHits ? '' : '<div class="empty">ไม่พบแคมเปญ</div>');
       // an order number in the search box jumps straight to that order
       if (/^\d{6,}$/.test(f)) $('#camps').insertAdjacentHTML('afterbegin', `<div class="camp" data-search="${esc(f)}"><b>${ICONS.doc} Search order ${esc(f)}</b><small>ค้นหาเลขคำสั่งซื้อในทุกแคมเปญ</small></div>`);
     };
@@ -249,7 +252,8 @@
   async function loadStock() {
     try {
       const st = await api('/api/admin/summary?campaign=' + encodeURIComponent(campaign ? campaign.id : '')); const s = st.stock; const fmt = (n) => (n == null ? '∞' : n.toLocaleString('en-US'));
-      $('#stock-pill').innerHTML = `<span class="note-pill ${s.sold_out ? 'sold' : ''}">Stock <b>${fmt(s.used.total)}</b> / ${fmt(s.limits.total)} · เหลือ <b>${fmt(s.remaining.total)}</b></span>`;
+      const el = $('#stock-pill'); if (!el) return;
+      el.innerHTML = `<span class="note-pill ${s.sold_out ? 'sold' : ''}">Stock <b>${fmt(s.used.total)}</b> / ${fmt(s.limits.total)} · เหลือ <b>${fmt(s.remaining.total)}</b></span>`;
     } catch (e) { /* ignore */ }
   }
   async function load(openId) {
@@ -257,6 +261,7 @@
     const qs = new URLSearchParams({ q: state.q, date: state.date, store: state.store, status: state.status, campaign: params.get('all') ? '' : (campaign ? campaign.id : ''), page: state.page });
     let data; try { data = await api('/api/admin/orders?' + qs); } catch (e) { if (/401/.test(e.message)) return location.reload(); list.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; return; }
     state.page = data.page;
+    if (!document.body.contains(list)) return; // navigated away while loading
     list.innerHTML = data.rows.map((o) => orderCard(o, { light: true, open: o.id === openId, extra: actionsFor(o), ...headExtras(o) })).join('') || '<div class="empty">ไม่พบคำสั่งซื้อ</div>';
     $('#pg').textContent = data.page; $('#prev').disabled = data.page <= 1; $('#next').disabled = data.page >= data.pages;
   }
