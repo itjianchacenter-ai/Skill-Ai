@@ -13,11 +13,14 @@
 <script>
 (async () => {
   const app = $('#app');
+  // In the single-file preview the page is re-run on every hash change; stop stale async renders.
+  const token = Symbol('page'); window.__pageToken = token; const alive = () => window.__pageToken === token;
   const params = new URLSearchParams(location.search);
   const state = { view: params.get('view') || '', campaign: params.get('campaign') || '', q: '', date: '', store: '', status: '', page: 1 };
   const go = (p) => { const qs = new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([, v]) => v))); location.href = '/admin-page' + (qs.toString() ? '?' + qs : ''); };
 
   const me = await api('/api/admin/me');
+  if (!alive()) return;
   if (!me.admin) { renderHeader('', { admin: true }); return renderLogin(); }
   const user = me.user, P = me.permissions;
   const VIEWS = { accounts: P.accounts, orders: true, slips: P.slip_review, pickup: true };
@@ -48,6 +51,7 @@
     const primary = campaigns.find((c) => c.active) || campaigns[0];
     let byStore = {};
     if (primary) { try { const s = await api('/api/admin/summary?campaign=' + encodeURIComponent(primary.id)); for (const r of s.by_store) byStore[r.store_id] = r; } catch (e) { /* ignore */ } }
+    if (!alive()) return;
     app.innerHTML = `
       <div class="toolbar">
         <input class="search" id="q" placeholder="Campaign / Order No. / Location …" style="width:300px">
@@ -127,6 +131,7 @@
   async function renderAccounts() {
     const ROLE_LABEL = { it_admin: 'IT - Admin', admin: 'Admin', finance: 'Finance' };
     let users = await api('/api/admin/users');
+    if (!alive()) return;
     app.innerHTML = `
       <div class="toolbar"><input class="search" id="q" placeholder="Search …"><button type="button" class="btn" id="new" style="padding:10px 20px;font-size:17px">+ New</button></div>
       <div id="acc-form"></div>
@@ -182,6 +187,7 @@
   /* ───────── order lists: Order (admin) · Slip Issue (finance) · Store Pick-up Order ───────── */
   const stores = await api('/api/stores');
   const campaigns = await api('/api/admin/campaigns');
+  if (!alive()) return;
   const campaign = campaigns.find((c) => c.id === state.campaign) || campaigns[0];
   const isSlips = state.view === 'slips', isPickup = state.view === 'pickup';
   state.q = params.get('q') || '';
@@ -259,9 +265,9 @@
   async function load(openId) {
     loadStock();
     const qs = new URLSearchParams({ q: state.q, date: state.date, store: state.store, status: state.status, campaign: params.get('all') ? '' : (campaign ? campaign.id : ''), page: state.page });
-    let data; try { data = await api('/api/admin/orders?' + qs); } catch (e) { if (/401/.test(e.message)) return location.reload(); list.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; return; }
+    let data; try { data = await api('/api/admin/orders?' + qs); } catch (e) { if (/401/.test(e.message)) return location.reload(); if (alive()) list.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; return; }
+    if (!alive()) return; // navigated away while loading
     state.page = data.page;
-    if (!document.body.contains(list)) return; // navigated away while loading
     list.innerHTML = data.rows.map((o) => orderCard(o, { light: true, open: o.id === openId, extra: actionsFor(o), ...headExtras(o) })).join('') || '<div class="empty">ไม่พบคำสั่งซื้อ</div>';
     $('#pg').textContent = data.page; $('#prev').disabled = data.page <= 1; $('#next').disabled = data.page >= data.pages;
   }
