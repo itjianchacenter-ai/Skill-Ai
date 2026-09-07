@@ -70,9 +70,11 @@ function renderHeader(active, { admin = false, role = '', user = null } = {}) {
   const item = (view, icon, label) => `<a class="pill ${active === view ? 'on' : ''}" href="/admin-page?view=${view}">${icon} ${label}</a>`;
   const adminNav = () => {
     const items = [];
+    // Home is the campaign page (/admin-page). Any menu or campaign adds query params, so show Back whenever they exist.
+    if (location.search.length > 1) items.push(`<a class="pill" href="/admin-page" aria-label="Back to campaign page">${ICONS.arrowL} Back</a>`);
     if (role === 'it_admin') items.push(item('accounts', ICONS.user, 'Account'));
-    if (role === 'it_admin' || role === 'admin') items.push(item('orders', ICONS.doc, 'Order'));
-    if (role === 'it_admin' || role === 'finance') items.push(item('slips', ICONS.slip, 'Slip Issue'));
+    items.push(item('orders', ICONS.doc, 'Order'));
+    items.push(item('slips', ICONS.slip, 'Slip Issue'));
     items.push(item('pickup', ICONS.store, 'Store Pick-up Order'));
     if (user) items.push(`<button type="button" class="pill" id="logout" title="${esc(user.username)}">Logout</button>`);
     return `<nav class="nav">${items.join('')}</nav>`;
@@ -86,7 +88,7 @@ function renderHeader(active, { admin = false, role = '', user = null } = {}) {
         <a class="pill" href="/stores">${ICONS.store} JIANCHA Store Location</a>
        </nav>`;
   el.innerHTML = brand + nav;
-  const lo = $('#logout'); if (lo) lo.addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }); location.href = '/admin-page'; });
+  const lo = $('#logout'); if (lo) lo.addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }); if (location.search.length > 1) location.href = '/admin-page'; else location.reload(); });
   updateCartBadge();
 }
 

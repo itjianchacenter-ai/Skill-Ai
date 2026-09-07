@@ -23,8 +23,8 @@
   if (!alive()) return;
   if (!me.admin) { renderHeader('', { admin: true }); return renderLogin(); }
   const user = me.user, P = me.permissions;
-  const VIEWS = { accounts: P.accounts, orders: true, slips: P.slip_review, pickup: true };
-  const home = user.role === 'finance' ? 'slips' : (user.role === 'it_admin' ? 'accounts' : 'orders');
+  const VIEWS = { accounts: P.accounts, orders: true, slips: true, pickup: true }; // Slip Issue is the same list for every role; approve/reject stay permission-gated
+  const home = 'orders'; // every role lands on the campaign page
   if (!VIEWS[state.view]) state.view = home;
   renderHeader(state.view, { admin: true, role: user.role, user });
   if (state.view === 'slips') state.status = params.get('status') || '';

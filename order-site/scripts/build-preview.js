@@ -12,6 +12,7 @@ const toPreview = (js) => js
   .replace(/location\.href = /g, "location.hash = '#' + ")
   .replace(/location\.reload\(\)/g, 'route()')
   .replace(/new URLSearchParams\(location\.search\)/g, "new URLSearchParams((location.hash.split('?')[1] || ''))")
+  .replace(/location\.search/g, "(location.hash.includes('?') ? '?' + location.hash.split('?')[1] : '')")
   .replace(/href="\//g, 'href="#/');
 // app.js without its real api(): the mock defines api() instead
 let app = read(path.join(PUB, 'js/app.js'));
