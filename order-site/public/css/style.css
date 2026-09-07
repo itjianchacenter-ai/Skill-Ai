@@ -189,6 +189,12 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .camp.create .plus{font-size:56px;font-weight:800;line-height:1}
 .camp.create b{font-size:18px}
 .camp:hover,.acc:hover{border-color:#000}
+.camp.store-sel{min-height:170px;padding:20px 18px}
+.camp.store-sel b{font-size:20px}
+.camp.store-sel .counts{display:flex;gap:18px;margin-top:14px}
+.camp.store-sel .counts>span{display:flex;flex-direction:column;align-items:center;min-width:56px}
+.camp.store-sel .counts em{font-style:normal;font-weight:800;font-size:22px;line-height:1}
+.camp.store-sel .counts small{font-size:11px;color:var(--muted);margin-top:2px}
 .acc b{font-size:20px;font-weight:700;display:block;margin-bottom:12px}
 .acc .k{font-weight:700}
 .acc.inactive{opacity:.55}

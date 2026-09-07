@@ -43,16 +43,35 @@
   if (state.view in CAMPAIGN_VIEWS && !state.campaign) return renderCampaigns();
 
   async function renderCampaigns() {
-    const campaigns = await api('/api/admin/campaigns');
+    const [campaigns, stores] = await Promise.all([api('/api/admin/campaigns'), api('/api/stores')]);
+    // per-store order counts of the active campaign (first card) so each JIANCHA branch can be opened directly
+    const primary = campaigns.find((c) => c.active) || campaigns[0];
+    let byStore = {};
+    if (primary) { try { const s = await api('/api/admin/summary?campaign=' + encodeURIComponent(primary.id)); for (const r of s.by_store) byStore[r.store_id] = r; } catch (e) { /* ignore */ } }
     app.innerHTML = `
       <div class="toolbar">
         <input class="search" id="q" placeholder="Campaign / Order No. / Location …" style="width:300px">
         <span class="pill">${ICONS.target} Campaign Selection</span>
       </div>
       <div class="camp-grid" id="camps"></div>
-      <div id="camp-form"></div>`;
+      <div id="camp-form"></div>
+      <div class="label" id="stores-label">${ICONS.store} JIANCHA Store <span class="th" style="font-weight:400">· เลือกสาขาเพื่อดูออเดอร์ของสาขานั้น</span></div>
+      <div class="camp-grid" id="store-cards"></div>`;
+    const drawStores = (f) => {
+      const cards = stores.filter((s) => !f || `${s.brand} ${s.name}`.toLowerCase().includes(f)).map((s) => {
+        const r = byStore[s.id] || { total: 0, to_pickup: 0, picked_up: 0, awaiting_review: 0, unpaid: 0 };
+        return `<div class="camp store-sel" data-open-store="${esc(s.id)}">
+          <b>${esc(s.brand)} - ${esc(s.name)}</b>
+          <span class="counts"><span><em>${r.to_pickup}</em><small class="th">รอรับสินค้า</small></span><span><em>${r.picked_up}</em><small class="th">รับแล้ว</small></span><span><em>${r.awaiting_review}</em><small class="th">รอตรวจสลิป</small></span><span><em>${r.unpaid}</em><small class="th">ยังไม่จ่าย</small></span></span>
+          <small>${primary ? esc(primary.name) + ' · ' : ''}${r.total} orders</small>
+        </div>`;
+      });
+      $('#store-cards').innerHTML = cards.join('') || '<div class="empty">ไม่พบสาขา</div>';
+      $('#stores-label').style.display = cards.length ? '' : 'none';
+    };
     const draw = (filter = '') => {
       const f = filter.trim().toLowerCase();
+      drawStores(f);
       const cards = campaigns.filter((c) => !f || c.name.toLowerCase().includes(f) || c.id.includes(f)).map((c) => `
         <div class="camp ${c.active ? '' : 'inactive'}" data-open="${esc(c.id)}">
           ${P.campaigns ? `<button type="button" class="wrench" data-edit="${esc(c.id)}" aria-label="แก้ไข">${ICONS.wrench}</button>` : ''}
@@ -71,6 +90,10 @@
       if (e.target.closest('[data-create]')) return campaignForm(null);
       const s = e.target.closest('[data-search]'); if (s) return go({ view: 'orders', campaign: campaigns[0] ? campaigns[0].id : '', q: s.dataset.search, all: 1 });
       const card = e.target.closest('[data-open]'); if (card) go({ view: state.view, campaign: card.dataset.open });
+    });
+    $('#store-cards').addEventListener('click', (e) => {
+      const card = e.target.closest('[data-open-store]'); if (!card || !primary) return;
+      go({ view: state.view === 'slips' ? 'slips' : (state.view === 'orders' ? 'orders' : 'pickup'), campaign: primary.id, store: card.dataset.openStore });
     });
     function campaignForm(c) {
       const isNew = !c;
@@ -159,6 +182,7 @@
   const campaign = campaigns.find((c) => c.id === state.campaign) || campaigns[0];
   const isSlips = state.view === 'slips', isPickup = state.view === 'pickup';
   state.q = params.get('q') || '';
+  state.store = params.get('store') || '';
   if (isPickup && !state.status) state.status = 'paid';
   const FIN_LABEL = { pending: 'Unpaid', slip_uploaded: 'Paid', paid: 'Approved', slip_rejected: 'On Issue', picked_up: 'Picked up', cancelled: 'Cancelled' };
   const STATUS_OPTIONS = isSlips
@@ -178,14 +202,12 @@
         <label class="pill datepill">${ICONS.cal} <span id="date-label">Date Selection</span><input type="date" id="date"></label>
       </div>
     </div>
-    ${isPickup ? '<div class="chips" id="store-chips" style="margin-bottom:20px"></div>' : ''}
+    <div class="chips" id="store-chips" style="margin-bottom:20px"></div>
     <div id="list"></div>
     <div class="pager"><button type="button" id="prev">${ICONS.arrowL}</button><span class="pg" id="pg">1</span><button type="button" id="next">${ICONS.arrowR}</button></div>`;
   $('#status').value = state.status;
-  if (isPickup) {
-    $('#store-chips').innerHTML = '<button type="button" class="pill on" data-store="">All stores</button>' + storeChips(stores, '');
-    $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
-  }
+  $('#store-chips').innerHTML = `<button type="button" class="pill ${state.store ? '' : 'on'}" data-store="">All stores</button>` + storeChips(stores, state.store);
+  $('#store-chips').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (!b) return; state.store = b.dataset.store; state.page = 1; $$('#store-chips .pill').forEach((p) => p.classList.toggle('on', p === b)); load(); });
   let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value.trim(); state.page = 1; load(); }, 250); });
   $('#date').addEventListener('change', (e) => { state.date = e.target.value; $('#date-label').textContent = state.date ? fmtDateTime(state.date + 'T00:00').slice(0, 10) : 'Date Selection'; state.page = 1; load(); });
   $('#status').addEventListener('change', (e) => { state.status = e.target.value; state.page = 1; load(); });

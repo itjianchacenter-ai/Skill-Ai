@@ -457,7 +457,10 @@ app.get('/api/admin/summary', requireAdmin, (req, res) => {
   if (campaign) { where.push('campaign_id = ?'); args.push(campaign); }
   const w = where.length ? ` WHERE ${where.join(' AND ')}` : '';
   const byStatus = db.prepare(`SELECT status, COUNT(*) n, COALESCE(SUM(total),0) amount FROM orders${w} GROUP BY status`).all(...args);
-  const byStore = db.prepare(`SELECT store_id, store_name, COUNT(*) n FROM orders${w}${w ? ' AND' : ' WHERE'} status IN ('paid','slip_uploaded') GROUP BY store_id, store_name ORDER BY store_name`).all(...args);
+  const byStore = db.prepare(`SELECT store_id, store_name, COUNT(*) AS total,
+        SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS to_pickup, SUM(CASE WHEN status = 'picked_up' THEN 1 ELSE 0 END) AS picked_up,
+        SUM(CASE WHEN status = 'slip_uploaded' THEN 1 ELSE 0 END) AS awaiting_review, SUM(CASE WHEN status IN ('pending','slip_rejected') THEN 1 ELSE 0 END) AS unpaid
+      FROM orders${w}${w ? ' AND' : ' WHERE'} status <> 'cancelled' GROUP BY store_id, store_name ORDER BY store_name`).all(...args);
   res.json({ by_status: byStatus, by_store: byStore, stock: stockView(campaign ? (getCampaign(campaign) || activeCampaign()) : activeCampaign()) });
 });
 

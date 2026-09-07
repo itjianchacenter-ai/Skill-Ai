@@ -251,6 +251,14 @@ async function api(path, opts = {}) {
     pvSave(d); return pvView(d, o, true);
   }
   if ((m = p.match(/^\/api\/admin\/orders\/([^/]+)$/))) return pvView(d, find(m[1]) || pvFail('ไม่พบคำสั่งซื้อ'), true);
-  if (p === '/api/admin/summary') { const c = d.campaigns.find((x) => x.id === q.get('campaign')) || active; return { by_status: [], by_store: [], stock: pvStockView(d, c) }; }
+  if (p === '/api/admin/summary') {
+    const c = d.campaigns.find((x) => x.id === q.get('campaign')) || active; const byStore = {};
+    for (const o of d.orders) {
+      if (o.status === 'cancelled' || (q.get('campaign') && o.campaign_id !== c.id)) continue;
+      const s = byStore[o.store_id] || (byStore[o.store_id] = { store_id: o.store_id, store_name: o.store_name, total: 0, to_pickup: 0, picked_up: 0, awaiting_review: 0, unpaid: 0 });
+      s.total++; if (o.status === 'paid') s.to_pickup++; if (o.status === 'picked_up') s.picked_up++; if (o.status === 'slip_uploaded') s.awaiting_review++; if (['pending', 'slip_rejected'].includes(o.status)) s.unpaid++;
+    }
+    return { by_status: [], by_store: Object.values(byStore).sort((a, b) => a.store_name.localeCompare(b.store_name)), stock: pvStockView(d, c) };
+  }
   pvFail('not found: ' + path);
 }
