@@ -10,28 +10,13 @@
 
   <div class="hero ph" id="hero"></div>
 
-  <div class="menu-cols">
-    <section>
-      <div class="label" id="lbl-drink"></div>
-      <div class="menu-grid" id="drinks"></div>
-    </section>
-    <section>
-      <div class="label" id="lbl-dessert"></div>
-      <div class="menu-grid" id="desserts"></div>
-    </section>
-  </div>
-
   <section class="section">
     <div class="row-between">
-      <div class="label" id="lbl-match"></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-        <span class="note-pill"><b>หมายเหตุ:</b> สามารถเลือกจับคู่เองได้</span>
-        <span id="stock-pill"></span>
-        <button type="button" class="btn" id="add-match" disabled>+ Add Match</button>
-      </div>
+      <div class="label" id="lbl-sets"></div>
+      <span id="stock-pill" style="margin-bottom:14px"></span>
     </div>
     <div class="err" id="stock-err"></div>
-    <div class="matches" id="matches"></div>
+    <div class="sets" id="sets"></div>
   </section>
 
   <section class="section">
@@ -67,9 +52,7 @@
 <script>
 (async () => {
   renderHeader('home');
-  $("#lbl-drink").innerHTML = ICONS.drink + " Drink";
-  $('#lbl-dessert').innerHTML = ICONS.dessert + ' Dessert';
-  $('#lbl-match').innerHTML = ICONS.match + ' Your Match';
+  $('#lbl-sets').innerHTML = ICONS.match + ' Match Sets';
   $('#lbl-pickup').innerHTML = ICONS.pin + ' Pick-up Location';
   $('#lbl-summary').innerHTML = ICONS.tag + ' Order Summary';
 
@@ -79,39 +62,61 @@
   async function refreshStock() { try { stock = await api('/api/stock'); } catch (e) { /* keep last */ } render(); }
   if (menu.banner) $('#hero').outerHTML = '<img class="hero" style="object-fit:cover;width:calc(100% - 80px)" src="' + esc(menu.banner) + '" alt="">';
 
-  const itemHtml = (kind, x) => `<label class="item">
-      <div class="img ph"></div>
-      <div class="meta"><input type="radio" name="${kind}" value="${esc(x.id)}"><span class="radio"></span>
-        <span class="names"><span class="en">${esc(x.name_en)}</span><span class="th">${esc(x.name_th)}</span></span>
-        <span class="price">${money(x.price)}</span></div></label>`;
-  $('#drinks').innerHTML = menu.drinks.map((x) => itemHtml('drink', x)).join('') || '<div class="empty">ยังไม่มีเมนูเครื่องดื่ม</div>';
-  $('#desserts').innerHTML = menu.desserts.map((x) => itemHtml('dessert', x)).join('') || '<div class="empty">ยังไม่มีเมนูของหวาน</div>';
-
-  const sel = (kind) => ($(`input[name="${kind}"]:checked`) || {}).value || '';
-  const refreshAdd = () => { $('#add-match').disabled = (stock && stock.sold_out) || !(sel('drink') || sel('dessert')); };
-  document.addEventListener('change', (e) => { if (e.target.matches('input[type=radio]')) refreshAdd(); });
-  $('#add-match').addEventListener('click', () => {
-    const short = stockCheck(stock, loadCart(), { drink: sel('drink') ? 1 : 0, dessert: sel('dessert') ? 1 : 0 });
-    if (short) { $('#stock-err').textContent = short; return; }
-    $('#stock-err').textContent = '';
-    cartAdd(sel('drink'), sel('dessert'), 1);
-    $$('input[type=radio]').forEach((r) => { r.checked = false; }); refreshAdd(); render();
+  // One card per Match Set. Ticking the circle puts the set in the order; − / + change the quantity.
+  const setCard = (s) => {
+    const line = cartLine(s.id); const qty = line ? line.quantity : 0;
+    const img = (src, cls) => (src ? `<img class="ph ${cls}" src="${esc(src)}" alt="">` : `<div class="ph ${cls}"></div>`);
+    const smalls = [0, 1, 2].map((i) => img((s.images || [])[i], '')).join('');
+    return `<div class="set ${qty ? 'picked' : ''}" data-set="${esc(s.id)}">
+      <div class="set-imgs">${img(s.image, 'big')}<div class="small">${smalls}</div><span class="set-tag">${esc(s.label)}</span></div>
+      <div class="set-meta">
+        <label class="pick"><input type="checkbox" data-pick="${esc(s.id)}" ${qty ? 'checked' : ''}><span class="radio"></span></label>
+        <div class="names">
+          <span class="en">${esc(s.name_en)}</span><span class="th">${esc(s.name_th)}</span>
+          <ul class="items">${(s.items || []).map((i) => `<li>${esc(i.name_en)}${i.name_th ? ` <span class="th">(${esc(i.name_th)})</span>` : ''}</li>`).join('')}</ul>
+        </div>
+        <div class="right">
+          <b class="price">${money(s.price)}</b>
+          <span class="qty-pill"><button type="button" data-dec="${esc(s.id)}" aria-label="ลด">−</button><span>x ${qty || 1}</span><button type="button" data-inc="${esc(s.id)}" aria-label="เพิ่ม">+</button></span>
+        </div>
+      </div>
+    </div>`;
+  };
+  const sets = $('#sets');
+  sets.addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-pick]'); if (!cb) return;
+    const s = map[cb.dataset.pick];
+    if (cb.checked) {
+      const short = stockCheck(stock, loadCart(), setPieces(s), map);
+      if (short) { $('#stock-err').textContent = short; cb.checked = false; return; }
+      $('#stock-err').textContent = ''; cartAdd(s.id, 1);
+    } else cartSetQty(s.id, 0);
+    render();
+  });
+  sets.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-inc],[data-dec]'); if (!t) return;
+    const id = t.dataset.inc || t.dataset.dec; const s = map[id]; const line = cartLine(id);
+    if (t.dataset.inc) {
+      const short = stockCheck(stock, loadCart(), setPieces(s), map);
+      if (short) { $('#stock-err').textContent = short; return; }
+      $('#stock-err').textContent = '';
+      if (line) cartSetQty(id, Math.min(99, line.quantity + 1)); else cartAdd(id, 1);
+    } else if (line) cartSetQty(id, line.quantity - 1);
+    render();
   });
 
   $('#note').value = getNote();
   $('#note').addEventListener('input', (e) => setNote(e.target.value));
   $('#stores').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (b) { setStore(b.dataset.store); render(); } });
-  bindMatchControls($('#matches'), render, { getStock, errEl: $('#stock-err') });
 
   function render() {
     const cart = loadCart(); const storeId = getStore(); const store = stores.find((s) => s.id === storeId);
     $('#stock-pill').innerHTML = stockPill(stock);
     $('#confirm').disabled = Boolean(stock && stock.sold_out);
-    refreshAdd();
-    $('#matches').innerHTML = cart.map((l) => matchCard(l, map)).join('') || '<div class="match add">เลือกเครื่องดื่ม / ของหวานด้านบน<br>แล้วกด <b>+ Add Match</b><span class="th">Choose a drink and a dessert, then add your match</span></div>';
+    sets.innerHTML = (menu.sets || []).map(setCard).join('') || '<div class="empty">ยังไม่มีเซ็ตเมนู</div>';
     $('#stores').innerHTML = storeChips(stores, storeId);
     const lines = cart.map((l) => `<li><span>${esc(lineName(l, map))}</span><span class="n">x ${l.quantity}</span><span class="p">${money(linePrice(l, map) * l.quantity)} ฿</span></li>`);
-    while (lines.length < 5) lines.push('<li class="blank"></li>');
+    while (lines.length < 4) lines.push('<li class="blank"></li>');
     $('#lines').innerHTML = lines.join('');
     const total = cart.reduce((s, l) => s + linePrice(l, map) * l.quantity, 0);
     $('#total').textContent = money(total) + ' ฿';

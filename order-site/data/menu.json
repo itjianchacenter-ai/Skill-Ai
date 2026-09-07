@@ -7,36 +7,68 @@
     "from": 2026090001,
     "to": 2026092000
   },
-  "drinks": [
+  "sets": [
     {
-      "id": "D1",
+      "id": "A",
+      "label": "SET A",
       "name_en": "Menu Name",
       "name_th": "ชื่อเมนู ภาษาไทย",
-      "price": 120,
-      "image": ""
+      "price": 215,
+      "image": "",
+      "images": [
+        "",
+        "",
+        ""
+      ],
+      "pieces": 1,
+      "items": [
+        {
+          "name_en": "Menu name",
+          "name_th": "ชื่อเมนูน้ำ",
+          "kind": "drink"
+        },
+        {
+          "name_en": "Menu name",
+          "name_th": "ชื่อเมนูขนม",
+          "kind": "dessert"
+        },
+        {
+          "name_en": "Menu name",
+          "name_th": "ชื่อเมนูขนม",
+          "kind": "dessert"
+        }
+      ]
     },
     {
-      "id": "D2",
+      "id": "B",
+      "label": "SET B",
       "name_en": "Menu Name",
       "name_th": "ชื่อเมนู ภาษาไทย",
-      "price": 135,
-      "image": ""
-    }
-  ],
-  "desserts": [
-    {
-      "id": "S1",
-      "name_en": "Menu Name",
-      "name_th": "ชื่อเมนู ภาษาไทย",
-      "price": 95,
-      "image": ""
-    },
-    {
-      "id": "S2",
-      "name_en": "Menu Name",
-      "name_th": "ชื่อเมนู ภาษาไทย",
-      "price": 110,
-      "image": ""
+      "price": 245,
+      "image": "",
+      "images": [
+        "",
+        "",
+        ""
+      ],
+      "pieces": 1,
+      "items": [
+        {
+          "name_en": "Menu name",
+          "name_th": "ชื่อเมนูน้ำ",
+          "kind": "drink"
+        },
+        {
+          "name_en": "Menu name",
+          "name_th": "ชื่อเมนูขนม",
+          "kind": "dessert"
+        },
+        {
+          "name_en": "Menu name",
+          "name_th": "ชื่อเมนูขนม",
+          "kind": "dessert"
+        }
+      ]
     }
   ]
 }

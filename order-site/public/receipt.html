@@ -24,8 +24,8 @@
   let o;
   try { o = await api('/api/orders/' + encodeURIComponent(id)); } catch (e) { $('#receipt').innerHTML = '<div class="empty">ไม่พบคำสั่งซื้อ / Order not found</div>'; return; }
   const rows = o.lines.map((l) => {
-    const name = [l.drink_name, l.dessert_name].filter(Boolean).join(' + ');
-    return `<tr><td>${esc(name)}</td><td class="q">${l.quantity}</td><td class="p">${money(l.unit_price)}</td><td class="p">${money(l.line_total)}</td></tr>`;
+    const items = orderLineItems(l);
+    return `<tr><td>${esc(orderLineName(l))}${items ? `<br><small class="items-inline">${esc(items)}</small>` : ''}</td><td class="q">${l.quantity}</td><td class="p">${money(l.unit_price)}</td><td class="p">${money(l.line_total)}</td></tr>`;
   }).join('');
   const [en, th] = STATUS_LABEL[o.status] || [o.status, ''];
   $('#receipt').innerHTML = `

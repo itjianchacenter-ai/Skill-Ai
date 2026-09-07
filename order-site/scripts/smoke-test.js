@@ -26,26 +26,26 @@ const login = (who, username, password) => call(who, 'POST', '/api/admin/login',
   const server = app.listen(0); base = `http://127.0.0.1:${server.address().port}`;
   try {
     let r = await call('customer', 'GET', '/api/menu');
-    check('menu loads with campaign + stock', r.status === 200 && r.json.drinks.length >= 1 && r.json.campaign.name === 'JIANCHA x NAVORI' && r.json.stock.limits.total === 1000);
-    const menu = r.json; const d = menu.drinks[0].id, s = menu.desserts[0].id;
-    r = await call('customer', 'GET', '/api/stores'); check('stores load', r.status === 200 && r.json.length === 5);
+    check('menu loads with sets + campaign + stock', r.status === 200 && r.json.sets.length === 2 && r.json.sets[0].label === 'SET A' && r.json.sets[0].items.length === 3 && r.json.campaign.name === 'JIANCHA x NAVORI' && r.json.stock.limits.total === 1000, r.json.sets);
+    const menu = r.json; const A = menu.sets[0].id, B = menu.sets[1].id; // SET A 215 · SET B 245, each set = 1 unit of stock
+    r = await call('customer', 'GET', '/api/stores'); check('stores load (6 branches incl. Emsphere)', r.status === 200 && r.json.length === 6 && r.json.some((x) => x.name === 'Emsphere'));
     const storeId = r.json[2].id;
 
     // ── customer: ordering ──
-    r = await call('customer', 'POST', '/api/orders', { store_id: '', lines: [{ drink_id: d, quantity: 1 }] }); check('order without store rejected', r.status === 400);
+    r = await call('customer', 'POST', '/api/orders', { store_id: '', lines: [{ set_id: A, quantity: 1 }] }); check('order without store rejected', r.status === 400);
     r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [] }); check('order without lines rejected', r.status === 400);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: 'nope', quantity: 1 }] }); check('unknown menu rejected', r.status === 400);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, note: 'no sugar', lines: [{ drink_id: d, dessert_id: s, quantity: 2 }, { drink_id: d, quantity: 1 }] });
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ set_id: 'nope', quantity: 1 }] }); check('unknown set rejected', r.status === 400);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, note: 'no sugar', lines: [{ set_id: A, quantity: 2 }, { set_id: B, quantity: 1 }] });
     check('order created', r.status === 201 && /^\d{13}$/.test(r.json.order_number) && r.json.campaign_id === 'jiancha-x-navori', r.json);
     const order = r.json;
-    check('order lines + total', order.lines.length === 2 && order.total === 2 * (120 + 95) + 120 && order.store_name === 'JIAN CHA - Central World', order);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ dessert_id: s, quantity: 1 }] });
+    check('order lines + total', order.lines.length === 2 && order.total === 2 * 215 + 245 && order.lines[0].name === 'SET A · Menu Name' && order.lines[0].items.length === 3 && order.store_name === 'JIAN CHA - Central World', order);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ set_id: B, quantity: 1 }] });
     check('order numbers increment', r.json.order_number === String(BigInt(order.order_number) + 1n), r.json.order_number);
     const order2 = r.json;
     r = await call('customer', 'GET', '/api/orders'); check('history lists own orders', r.status === 200 && r.json.length === 2);
     r = await call('other', 'GET', '/api/orders'); check('other browser sees nothing', r.json.length === 0);
     r = await call('other', 'GET', `/api/orders/${order.id}`); check('other browser cannot read order', r.status === 404);
-    r = await call('customer', 'GET', `/api/orders/${order.id}/qr`); check('qr generated for order', r.status === 200 && /^data:image\/png/.test(r.json.qr_data_url) && r.json.amount === 550, r.json);
+    r = await call('customer', 'GET', `/api/orders/${order.id}/qr`); check('qr generated for order', r.status === 200 && /^data:image\/png/.test(r.json.qr_data_url) && r.json.amount === 675, r.json);
 
     // ── customer: slips ──
     r = await call('customer', 'POST', `/api/orders/${order.id}/slip`, png(1)); check('slip -> finance review queue', r.status === 200 && r.json.status === 'slip_uploaded', r.json);
@@ -116,21 +116,21 @@ const login = (who, username, password) => call(who, 'POST', '/api/admin/login',
     r = await call('it', 'POST', '/api/admin/campaigns', { name: 'JIANCHA x SUMMER', promo_from: 5, promo_to: 1 }); check('bad promo range rejected', r.status === 400);
     r = await call('it', 'PATCH', `/api/admin/campaigns/${camp2.id}`, { active: true }); check('campaign activated', r.json.active === true);
     r = await call('customer', 'GET', '/api/menu'); check('customer site follows active campaign', r.json.campaign.id === camp2.id && r.json.stock.limits.total === 500 && r.json.stock.used.total === 0);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: d, quantity: 1 }] }); check('order lands in new campaign', r.json.campaign_id === camp2.id);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ set_id: A, quantity: 1 }] }); check('order lands in new campaign', r.json.campaign_id === camp2.id);
     r = await call('it', 'PATCH', '/api/admin/campaigns/jiancha-x-navori', { active: true }); check('switch back', r.json.active === true);
     r = await call('it', 'GET', '/api/admin/campaigns'); check('exactly one active', r.json.filter((c) => c.active).length === 1);
 
-    // ── stock (campaign jiancha-x-navori: 1000 pieces; 6 used above) ──
-    r = await call('customer', 'GET', '/api/stock'); check('stock view', r.json.limits.total === 1000 && r.json.used.total === 6 && r.json.remaining.total === 994, r.json);
-    const big = (n) => Array.from({ length: n }, () => ({ drink_id: d, quantity: 99 }));
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: big(11) }); check('order above stock rejected', r.status === 409 && /เหลือเพียง 994/.test(r.json.error), r.json);
+    // ── stock (campaign jiancha-x-navori: 1000 sets; 4 used above: A×2 + B×1 + B×1) ──
+    r = await call('customer', 'GET', '/api/stock'); check('stock view', r.json.limits.total === 1000 && r.json.used.total === 4 && r.json.remaining.total === 996 && r.json.used.drink === 4 && r.json.used.dessert === 8, r.json);
+    const big = (n) => Array.from({ length: n }, () => ({ set_id: A, quantity: 99 }));
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: big(11) }); check('order above stock rejected', r.status === 409 && /เหลือเพียง 996/.test(r.json.error), r.json);
     r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: big(10) }); check('order within stock accepted', r.status === 201, r.json);
     const bigOrder = r.json;
-    r = await call('customer', 'GET', '/api/stock'); check('stock reserved by pending order', r.json.remaining.total === 4, r.json);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: d, dessert_id: s, quantity: 3 }] }); check('6 pieces vs 4 left rejected', r.status === 409, r.json);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ drink_id: d, dessert_id: s, quantity: 2 }] }); check('last 4 pieces accepted', r.status === 201, r.json);
+    r = await call('customer', 'GET', '/api/stock'); check('stock reserved by pending order', r.json.remaining.total === 6, r.json);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ set_id: B, quantity: 7 }] }); check('7 sets vs 6 left rejected', r.status === 409, r.json);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ set_id: B, quantity: 6 }] }); check('last 6 sets accepted', r.status === 201, r.json);
     r = await call('customer', 'GET', '/api/menu'); check('menu reports sold out', r.json.stock.sold_out === true && r.json.stock.remaining.total === 0, r.json.stock);
-    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ dessert_id: s, quantity: 1 }] }); check('sold out rejected', r.status === 409 && /หมดแล้ว/.test(r.json.error), r.json);
+    r = await call('customer', 'POST', '/api/orders', { store_id: storeId, lines: [{ set_id: A, quantity: 1 }] }); check('sold out rejected', r.status === 409 && /หมดแล้ว/.test(r.json.error), r.json);
     r = await call('it', 'POST', `/api/admin/orders/${bigOrder.id}/status`, { status: 'paid' });
     r = await call('it', 'POST', `/api/orders/${bigOrder.id}/code`); check('it-admin can issue code, unique', r.status === 200 && r.json.promo_code !== code1, r.json);
     r = await call('fin', 'POST', `/api/admin/orders/${bigOrder.id}/status`, { status: 'cancelled' }); check('finance cancels big order', r.json.status === 'cancelled');

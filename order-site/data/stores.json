@@ -1,7 +1,44 @@
 [
-  { "id": "siam-paragon",   "brand": "JIAN CHA", "name": "Siam Paragon",    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Siam+Paragon",    "active": true },
-  { "id": "groove",         "brand": "JIAN CHA", "name": "Groove",          "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Groove+CentralWorld", "active": true },
-  { "id": "central-world",  "brand": "JIAN CHA", "name": "Central World",   "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+CentralWorld",     "active": true },
-  { "id": "siam-discovery", "brand": "JIAN CHA", "name": "Siam Discovery",  "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Siam+Discovery",   "active": true },
-  { "id": "central-ladprao","brand": "JIAN CHA", "name": "Central Ladprao", "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Central+Ladprao",  "active": true }
+  {
+    "id": "siam-paragon",
+    "brand": "JIAN CHA",
+    "name": "Siam Paragon",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Siam+Paragon",
+    "active": true
+  },
+  {
+    "id": "groove",
+    "brand": "JIAN CHA",
+    "name": "Groove",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Groove+CentralWorld",
+    "active": true
+  },
+  {
+    "id": "central-world",
+    "brand": "JIAN CHA",
+    "name": "Central World",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+CentralWorld",
+    "active": true
+  },
+  {
+    "id": "siam-discovery",
+    "brand": "JIAN CHA",
+    "name": "Siam Discovery",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Siam+Discovery",
+    "active": true
+  },
+  {
+    "id": "central-ladprao",
+    "brand": "JIAN CHA",
+    "name": "Central Ladprao",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Central+Ladprao",
+    "active": true
+  },
+  {
+    "id": "emsphere",
+    "brand": "JIAN CHA",
+    "name": "Emsphere",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=JIAN+CHA+Emsphere",
+    "active": true
+  }
 ]

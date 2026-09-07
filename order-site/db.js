@@ -87,6 +87,12 @@ CREATE TABLE IF NOT EXISTS campaigns (
 );
 `);
 
+// order_lines: Match Set columns (migration for databases created before sets existed)
+for (const [col, ddl] of [['set_id', "TEXT DEFAULT ''"], ['set_label', "TEXT DEFAULT ''"], ['set_name', "TEXT DEFAULT ''"], ['items_json', "TEXT DEFAULT ''"], ['pieces', 'INTEGER'], ['drink_pieces', 'INTEGER'], ['dessert_pieces', 'INTEGER']]) {
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('order_lines') WHERE name = ?").get(col)) db.exec(`ALTER TABLE order_lines ADD COLUMN ${col} ${ddl}`);
+}
+db.exec("UPDATE order_lines SET pieces = (drink_id <> '') + (dessert_id <> ''), drink_pieces = (drink_id <> ''), dessert_pieces = (dessert_id <> '') WHERE pieces IS NULL");
+
 // orders.campaign_id (migration for databases created before campaigns existed)
 if (!db.prepare("SELECT 1 FROM pragma_table_info('orders') WHERE name = 'campaign_id'").get()) {
   db.exec('ALTER TABLE orders ADD COLUMN campaign_id TEXT');

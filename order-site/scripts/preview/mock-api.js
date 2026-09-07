@@ -31,13 +31,9 @@ function pvReset() { try { localStorage.removeItem(PREVIEW_DB_KEY); localStorage
 const PV_CAMPAIGN_ID = 'jiancha-x-navori';
 function pvSeed() {
   const day = pvNow().slice(0, 10).replace(/-/g, '');
-  const D = PREVIEW_MENU.drinks, S = PREVIEW_MENU.desserts, ST = PREVIEW_STORES;
+  const SETS = PREVIEW_MENU.sets, ST = PREVIEW_STORES;
   const mk = (i, { customer, store, lines, status, minutesAgo, note = '', slip = false, reason = '' }) => {
-    const ls = lines.map(([di, si, q]) => {
-      const drink = di != null ? D[di] : null, dessert = si != null ? S[si] : null;
-      const unit = pvMoney((drink ? drink.price : 0) + (dessert ? dessert.price : 0));
-      return { drink_id: drink ? drink.id : '', drink_name: drink ? drink.name_en : '', dessert_id: dessert ? dessert.id : '', dessert_name: dessert ? dessert.name_en : '', quantity: q, unit_price: unit, line_total: pvMoney(unit * q) };
-    });
+    const ls = lines.map(([si, q]) => pvSetLine(SETS[si], q));
     const total = pvMoney(ls.reduce((s, l) => s + l.line_total, 0));
     return {
       id: 'sample-' + i, order_number: day + String(i).padStart(5, '0'), customer_id: customer, campaign_id: PV_CAMPAIGN_ID, store_id: ST[store].id, store_name: `${ST[store].brand} - ${ST[store].name}`,
@@ -48,14 +44,14 @@ function pvSeed() {
     };
   };
   const orders = [
-    mk(1, { customer: 'me', store: 2, lines: [[0, 0, 1], [1, 1, 2]], status: 'picked_up', minutesAgo: 1500, note: 'หวานน้อย', slip: true }),
-    mk(2, { customer: 'c2', store: 0, lines: [[0, 1, 1]], status: 'paid', minutesAgo: 400, slip: true }),
-    mk(3, { customer: 'c3', store: 1, lines: [[1, null, 2]], status: 'slip_uploaded', minutesAgo: 210, slip: true }),
-    mk(4, { customer: 'me', store: 3, lines: [[1, 0, 1]], status: 'paid', minutesAgo: 150, slip: true }),
-    mk(5, { customer: 'c4', store: 2, lines: [[0, 0, 3]], status: 'pending', minutesAgo: 95 }),
-    mk(6, { customer: 'c5', store: 4, lines: [[null, 1, 2], [0, null, 1]], status: 'cancelled', minutesAgo: 80 }),
-    mk(7, { customer: 'c6', store: 2, lines: [[0, 1, 1], [1, 0, 1]], status: 'slip_uploaded', minutesAgo: 25, slip: true, note: 'รับ 18:00' }),
-    mk(8, { customer: 'c7', store: 0, lines: [[0, 1, 2]], status: 'slip_rejected', minutesAgo: 60, slip: true, reason: 'ยอดโอนไม่ตรง กรุณาอัปโหลดสลิปใหม่' }),
+    mk(1, { customer: 'me', store: 2, lines: [[0, 1], [1, 2]], status: 'picked_up', minutesAgo: 1500, note: 'หวานน้อย', slip: true }),
+    mk(2, { customer: 'c2', store: 0, lines: [[0, 1]], status: 'paid', minutesAgo: 400, slip: true }),
+    mk(3, { customer: 'c3', store: 1, lines: [[1, 2]], status: 'slip_uploaded', minutesAgo: 210, slip: true }),
+    mk(4, { customer: 'me', store: 3, lines: [[1, 1]], status: 'paid', minutesAgo: 150, slip: true }),
+    mk(5, { customer: 'c4', store: 2, lines: [[0, 3]], status: 'pending', minutesAgo: 95 }),
+    mk(6, { customer: 'c5', store: 4, lines: [[1, 2], [0, 1]], status: 'cancelled', minutesAgo: 80 }),
+    mk(7, { customer: 'c6', store: 2, lines: [[0, 1], [1, 1]], status: 'slip_uploaded', minutesAgo: 25, slip: true, note: 'รับ 18:00' }),
+    mk(8, { customer: 'c7', store: 5, lines: [[0, 2]], status: 'slip_rejected', minutesAgo: 60, slip: true, reason: 'ยอดโอนไม่ตรง กรุณาอัปโหลดสลิปใหม่' }),
   ];
   const users = [
     { id: 'u-it', username: 'it-admin', password: 'jiancha2026', role: 'it_admin', display_name: 'IT - Admin', department: 'IT', active: true, created_at: pvNow(-9000) },
@@ -65,6 +61,9 @@ function pvSeed() {
   const st = PREVIEW_MENU.stock || {}, pc = PREVIEW_MENU.promo_code || {};
   const campaigns = [{ id: PV_CAMPAIGN_ID, name: 'JIANCHA x NAVORI', active: true, stock: { total: st.total ?? 1000, drink: st.drink ?? null, dessert: st.dessert ?? null }, promo_code: { from: pc.from || 2026090001, to: pc.to || 2026092000 }, created_at: pvNow(-9000) }];
   return { orders, users, campaigns, session: null, counter: { day, seq: orders.length } };
+}
+function pvSetLine(s, q) {
+  return { set_id: s.id, set_label: s.label, set_name: s.name_en, items: s.items, name: `${s.label} · ${s.name_en}`, pieces: s.pieces, drink_pieces: s.drink_pieces, dessert_pieces: s.dessert_pieces, drink_id: '', drink_name: '', dessert_id: '', dessert_name: '', quantity: q, unit_price: s.price, line_total: pvMoney(s.price * q) };
 }
 function pvDb() { let d = pvLoad(); if (!d || !Array.isArray(d.orders) || !Array.isArray(d.users)) { d = pvSeed(); pvSave(d); } return d; }
 function pvNextNumber(d) {
@@ -87,14 +86,13 @@ function pvFail(msg) { throw new Error(msg); }
 function pvStockView(d, c) {
   const limits = { total: c.stock.total ?? null, drink: c.stock.drink ?? null, dessert: c.stock.dessert ?? null };
   const used = { drink: 0, dessert: 0, total: 0 };
-  for (const o of d.orders) if (o.status !== 'cancelled' && o.campaign_id === c.id) for (const l of o.lines) { if (l.drink_id) used.drink += l.quantity; if (l.dessert_id) used.dessert += l.quantity; }
-  used.total = used.drink + used.dessert;
+  for (const o of d.orders) if (o.status !== 'cancelled' && o.campaign_id === c.id) for (const l of o.lines) { used.total += l.quantity * (l.pieces ?? 1); used.drink += l.quantity * (l.drink_pieces || 0); used.dessert += l.quantity * (l.dessert_pieces || 0); }
   const remaining = {}; for (const k of ['total', 'drink', 'dessert']) remaining[k] = limits[k] == null ? null : Math.max(0, limits[k] - used[k]);
   return { limits, used, remaining, sold_out: ['total', 'drink', 'dessert'].some((k) => remaining[k] === 0) };
 }
 function pvStockShortfall(d, c, want) {
   const { remaining } = pvStockView(d, c); const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
-  for (const k of ['total', 'drink', 'dessert']) if (remaining[k] != null && want[k] > remaining[k]) return remaining[k] === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${remaining[k]} ชิ้น (สั่ง ${want[k]} ชิ้น) / Only ${remaining[k]} left`;
+  for (const k of ['total', 'drink', 'dessert']) if (remaining[k] != null && want[k] > remaining[k]) return remaining[k] === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${remaining[k]} ชุด (สั่ง ${want[k]} ชุด) / Only ${remaining[k]} left`;
   return '';
 }
 function pvCampaignStats(d, c) {
@@ -141,15 +139,14 @@ async function api(path, opts = {}) {
   if (p === '/api/orders' && method === 'POST') {
     const store = PREVIEW_STORES.find((s) => s.id === String(body.store_id)); if (!store) pvFail('กรุณาเลือกสาขาที่รับสินค้า');
     if (!Array.isArray(body.lines) || !body.lines.length) pvFail('ยังไม่มีรายการในตะกร้า');
-    const D = Object.fromEntries(PREVIEW_MENU.drinks.map((x) => [x.id, x])), S = Object.fromEntries(PREVIEW_MENU.desserts.map((x) => [x.id, x]));
+    const SETS = Object.fromEntries(PREVIEW_MENU.sets.map((x) => [x.id, x]));
     const lines = body.lines.map((l) => {
-      const drink = l.drink_id ? D[l.drink_id] : null, dessert = l.dessert_id ? S[l.dessert_id] : null; const qty = parseInt(l.quantity, 10);
-      if ((!drink && !dessert) || !(qty >= 1 && qty <= 99)) pvFail('รายการสินค้าไม่ถูกต้อง');
-      const unit = pvMoney((drink ? drink.price : 0) + (dessert ? dessert.price : 0));
-      return { drink_id: drink ? drink.id : '', drink_name: drink ? drink.name_en : '', dessert_id: dessert ? dessert.id : '', dessert_name: dessert ? dessert.name_en : '', quantity: qty, unit_price: unit, line_total: pvMoney(unit * qty) };
+      const s = SETS[String(l.set_id)]; const qty = parseInt(l.quantity, 10);
+      if (!s) pvFail('มีเซ็ตที่ไม่มีให้บริการแล้ว กรุณาเลือกใหม่'); if (!(qty >= 1 && qty <= 99)) pvFail('รายการสินค้าไม่ถูกต้อง');
+      return pvSetLine(s, qty);
     });
     const total = pvMoney(lines.reduce((s, l) => s + l.line_total, 0));
-    const want = lines.reduce((w, r) => { if (r.drink_id) w.drink += r.quantity; if (r.dessert_id) w.dessert += r.quantity; w.total = w.drink + w.dessert; return w; }, { drink: 0, dessert: 0, total: 0 });
+    const want = lines.reduce((w, r) => { w.total += r.quantity * r.pieces; w.drink += r.quantity * r.drink_pieces; w.dessert += r.quantity * r.dessert_pieces; return w; }, { drink: 0, dessert: 0, total: 0 });
     const short = pvStockShortfall(d, active, want); if (short) pvFail(short);
     const o = { promo_code: null, id: pvUuid(), order_number: pvNextNumber(d), customer_id: me, campaign_id: active.id, store_id: store.id, store_name: `${store.brand} - ${store.name}`, total, status: total > 0 ? 'pending' : 'paid', note: String(body.note || '').slice(0, 500), created_at: pvNow(), paid_at: total > 0 ? null : pvNow(), picked_up_at: null, cancelled_at: null, slip_url: '', slip_hash: '', slip_ref: '', slip_amount: null, slip_reason: '', slip_verified: 0, lines };
     d.orders.unshift(o); pvSave(d); return pvView(d, o);

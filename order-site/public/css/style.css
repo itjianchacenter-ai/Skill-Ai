@@ -51,11 +51,38 @@ svg.ic{width:18px;height:18px;flex:none;vertical-align:-3px}
 .note-pill b{font-weight:700}
 .note-pill.sold{background:#000;color:#fff;border-color:#000}
 
+/* Match Sets (homepage) */
+.sets{display:grid;grid-template-columns:1fr 1fr;gap:44px}
+@media (max-width:800px){.sets{grid-template-columns:1fr}}
+.set-imgs{display:grid;grid-template-columns:1fr 88px auto;gap:12px;align-items:start}
+.set-imgs .big{aspect-ratio:1/1;width:100%;object-fit:cover}
+.set-imgs .small{display:grid;gap:12px}
+.set-imgs .small .ph{aspect-ratio:1/1;width:88px;object-fit:cover}
+.set-tag{background:#000;color:#fff;font-weight:700;font-size:13px;padding:6px 12px;border-radius:4px;white-space:nowrap}
+.set-meta{display:flex;gap:12px;margin-top:14px;align-items:flex-start}
+.set-meta .pick{position:relative;flex:none;margin-top:2px}
+.set-meta .pick input{position:absolute;opacity:0;pointer-events:none}
+.set-meta .pick .radio{display:block;width:26px;height:26px;border:1px solid var(--line);border-radius:50%;background:#fff;position:relative;cursor:pointer}
+.set-meta .pick input:checked + .radio::after{content:"";position:absolute;inset:6px;border-radius:50%;background:#000}
+.set-meta .names{flex:1;min-width:0;line-height:1.2}
+.set-meta .names .en{font-size:16px;font-weight:500;display:block}
+.set-meta .names .th{font-size:12px;display:block}
+.set-meta .items,.match .items{margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.5}
+.set-meta .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.set-meta .price{font-weight:700;font-size:16px}
+.qty-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--r-pill);padding:2px 8px;font-size:12px;font-weight:700;background:#fff}
+.qty-pill button{border:0;background:none;padding:0 2px;font-weight:700;font-size:14px;line-height:1}
+.set.picked .set-tag{outline:2px solid #000}
+.items-inline{color:var(--muted);font-size:12px}
+
 /* match cards */
 .matches{display:flex;gap:24px;flex-wrap:wrap}
 .match{border:1px solid var(--line);border-radius:var(--r-card);background:#fff;padding:14px 20px 12px;width:240px;position:relative}
 .match .thumbs{display:flex;gap:12px}
-.match .thumbs .ph{width:84px;height:84px}
+.match .thumbs .ph{width:84px;height:84px;object-fit:cover}
+.match .thumbs{align-items:flex-start;justify-content:space-between}
+.match .names .en{display:block;font-size:14px;font-weight:500}
+.match .names .th{display:block;font-size:12px}
 .match .names{display:flex;gap:12px;font-size:13px;margin-top:8px}
 .match .names span{width:84px;line-height:1.2;overflow:hidden;text-overflow:ellipsis}
 .match .foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-weight:700}

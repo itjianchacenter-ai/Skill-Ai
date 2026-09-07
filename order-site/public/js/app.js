@@ -38,15 +38,15 @@ async function api(path, opts = {}) {
   return data;
 }
 
-/* cart: [{drink_id, dessert_id, quantity}] */
-function loadCart() { try { return (JSON.parse(localStorage.getItem(CART_KEY)) || []).filter((l) => l && (l.drink_id || l.dessert_id) && l.quantity > 0); } catch (e) { return []; } }
+/* cart: [{set_id, quantity}] — one line per Match Set */
+function loadCart() { try { return (JSON.parse(localStorage.getItem(CART_KEY)) || []).filter((l) => l && l.set_id && l.quantity > 0); } catch (e) { return []; } }
 function saveCart(c) { try { localStorage.setItem(CART_KEY, JSON.stringify(c)); } catch (e) { /* ignore */ } updateCartBadge(); }
 function cartCount() { return loadCart().reduce((s, l) => s + (l.quantity || 0), 0); }
-function lineKey(l) { return `${l.drink_id || ''}|${l.dessert_id || ''}`; }
-function cartAdd(drink_id, dessert_id, qty = 1) {
-  const c = loadCart(); const k = `${drink_id || ''}|${dessert_id || ''}`;
-  const ex = c.find((l) => lineKey(l) === k);
-  if (ex) ex.quantity = Math.min(99, ex.quantity + qty); else c.push({ drink_id: drink_id || '', dessert_id: dessert_id || '', quantity: qty });
+function lineKey(l) { return String(l.set_id || ''); }
+function cartLine(set_id) { return loadCart().find((l) => l.set_id === set_id) || null; }
+function cartAdd(set_id, qty = 1) {
+  const c = loadCart(); const ex = c.find((l) => l.set_id === set_id);
+  if (ex) ex.quantity = Math.min(99, ex.quantity + qty); else c.push({ set_id, quantity: qty });
   saveCart(c);
 }
 function cartSetQty(key, qty) { let c = loadCart(); c = c.map((l) => (lineKey(l) === key ? { ...l, quantity: qty } : l)).filter((l) => l.quantity > 0); saveCart(c); }
@@ -92,37 +92,38 @@ function renderHeader(active, { admin = false, role = '', user = null, hideNav =
   updateCartBadge();
 }
 
-/* menu lookup helpers */
+/* menu lookup helpers: the menu is a list of Match Sets */
 let _menu = null;
 async function getMenu() { if (!_menu) _menu = await api('/api/menu'); return _menu; }
-function menuMap(menu) { const m = {}; for (const d of menu.drinks) m[d.id] = { ...d, kind: 'drink' }; for (const s of menu.desserts) m[s.id] = { ...s, kind: 'dessert' }; return m; }
-function lineParts(line, map) { return [line.drink_id && map[line.drink_id], line.dessert_id && map[line.dessert_id]].filter(Boolean); }
-function linePrice(line, map) { return lineParts(line, map).reduce((s, p) => s + p.price, 0); }
-function lineName(line, map) { return lineParts(line, map).map((p) => p.name_en).join(' + '); }
+function menuMap(menu) { const m = {}; for (const s of menu.sets || []) m[s.id] = s; return m; }
+function lineSet(line, map) { return map[line.set_id] || null; }
+function linePrice(line, map) { const s = lineSet(line, map); return s ? s.price : 0; }
+function lineName(line, map) { const s = lineSet(line, map); return s ? `${s.label} · ${s.name_en}` : line.set_id; }
+function setItemsText(s) { return (s.items || []).map((i) => i.name_en + (i.name_th ? ` (${i.name_th})` : '')).join(', '); }
 
-/* "Your Match" card. editable = qty controls + remove */
+/* set card used on the cart page. editable = qty controls + remove */
 function matchCard(line, map, { editable = true } = {}) {
-  const parts = lineParts(line, map); const key = lineKey(line);
-  const thumbs = parts.map(() => '<div class="ph"></div>').join('');
-  const names = parts.map((p) => `<span title="${esc(p.name_en)}">${esc(p.name_en)}</span>`).join('');
+  const s = lineSet(line, map); const key = lineKey(line);
+  if (!s) return '';
   const qty = editable
     ? `<span class="qty"><button type="button" data-dec="${esc(key)}" aria-label="ลด">−</button>x${line.quantity}<button type="button" data-inc="${esc(key)}" aria-label="เพิ่ม">+</button></span>`
     : `<span>x${line.quantity}</span>`;
   return `<div class="match" data-key="${esc(key)}">
     ${editable ? `<button type="button" class="rm" data-rm="${esc(key)}" aria-label="ลบ">×</button>` : ''}
-    <div class="thumbs">${thumbs}</div>
-    <div class="names">${names}</div>
-    <div class="foot">${qty}<span>${money(linePrice(line, map) * line.quantity)} ฿</span></div>
+    <div class="thumbs">${s.image ? `<img class="ph" src="${esc(s.image)}" alt="">` : '<div class="ph"></div>'}<span class="set-tag">${esc(s.label)}</span></div>
+    <div class="names"><span class="en">${esc(s.name_en)}</span><span class="th">${esc(s.name_th)}</span></div>
+    <ul class="items">${(s.items || []).map((i) => `<li>${esc(i.name_en)}${i.name_th ? ` <span class="th">(${esc(i.name_th)})</span>` : ''}</li>`).join('')}</ul>
+    <div class="foot">${qty}<span>${money(s.price * line.quantity)} ฿</span></div>
   </div>`;
 }
-function bindMatchControls(root, rerender, { getStock, errEl } = {}) {
+function bindMatchControls(root, rerender, { getStock, errEl, map } = {}) {
   root.addEventListener('click', (e) => {
     const t = e.target.closest('[data-inc],[data-dec],[data-rm]'); if (!t) return;
     const cur = loadCart();
     if (t.dataset.inc) {
       const l = cur.find((x) => lineKey(x) === t.dataset.inc);
       if (l) {
-        const short = getStock ? stockCheck(getStock(), cur, { drink: l.drink_id ? 1 : 0, dessert: l.dessert_id ? 1 : 0 }) : '';
+        const short = getStock && map ? stockCheck(getStock(), cur, setPieces(map[l.set_id]), map) : '';
         if (short) { if (errEl) errEl.textContent = short; return; }
         if (errEl) errEl.textContent = '';
         cartSetQty(t.dataset.inc, Math.min(99, l.quantity + 1));
@@ -134,19 +135,20 @@ function bindMatchControls(root, rerender, { getStock, errEl } = {}) {
   });
 }
 
-/* stock: pieces = every drink and every dessert counts as one piece */
-function cartPieces(cart, extra = {}) {
-  const w = { drink: extra.drink || 0, dessert: extra.dessert || 0, total: 0 };
-  for (const l of cart) { if (l.drink_id) w.drink += l.quantity; if (l.dessert_id) w.dessert += l.quantity; }
-  w.total = w.drink + w.dessert; return w;
+/* stock: each set reserves `pieces` (default 1) plus its drink / dessert item counts */
+function setPieces(s, qty = 1) { return s ? { total: (s.pieces || 1) * qty, drink: (s.drink_pieces || 0) * qty, dessert: (s.dessert_pieces || 0) * qty } : { total: 0, drink: 0, dessert: 0 }; }
+function cartPieces(cart, extra = {}, map = {}) {
+  const w = { total: extra.total || 0, drink: extra.drink || 0, dessert: extra.dessert || 0 };
+  for (const l of cart) { const p = setPieces(map[l.set_id], l.quantity); w.total += p.total; w.drink += p.drink; w.dessert += p.dessert; }
+  return w;
 }
 /* '' when the cart (plus `extra` pieces) fits in the remaining stock, else a message */
-function stockCheck(stock, cart, extra = {}) {
+function stockCheck(stock, cart, extra = {}, map = {}) {
   if (!stock || !stock.remaining) return '';
-  const want = cartPieces(cart, extra); const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
+  const want = cartPieces(cart, extra, map); const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
   for (const k of ['total', 'drink', 'dessert']) {
     const r = stock.remaining[k]; if (r == null || want[k] <= r) continue;
-    return r === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${r} ชิ้น / Only ${r} left`;
+    return r === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${r} ชุด / Only ${r} left`;
   }
   return '';
 }
@@ -154,7 +156,7 @@ function stockPill(stock) {
   if (!stock || !stock.remaining) return '';
   if (stock.sold_out) return '<span class="note-pill sold"><b>สินค้าหมด</b> Sold out</span>';
   const parts = [];
-  if (stock.remaining.total != null) parts.push(`เหลือ <b>${stock.remaining.total.toLocaleString('en-US')}</b> ชิ้น`);
+  if (stock.remaining.total != null) parts.push(`เหลือ <b>${stock.remaining.total.toLocaleString('en-US')}</b> ชุด`);
   if (stock.remaining.drink != null) parts.push(`เครื่องดื่ม <b>${stock.remaining.drink.toLocaleString('en-US')}</b>`);
   if (stock.remaining.dessert != null) parts.push(`ของหวาน <b>${stock.remaining.dessert.toLocaleString('en-US')}</b>`);
   return parts.length ? `<span class="note-pill th">${parts.join(' · ')}</span>` : '';
@@ -186,11 +188,15 @@ const STATUS_LABEL = {
 function statusPill(s) { const [en, th] = STATUS_LABEL[s] || [s, '']; return `<span class="status ${esc(s)}">${en}<span class="th">${th}</span></span>`; }
 function fmtDateTime(v) { if (!v) return ''; const d = new Date(String(v).replace(' ', 'T')); if (isNaN(d)) return v; const p = (n) => String(n).padStart(2, '0'); return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 
+/* an order line as text: "SET A · Menu Name" (sets) or "Drink + Dessert" (orders placed before sets existed) */
+function orderLineName(l) { return l.name || (l.set_id ? `${l.set_label || l.set_id} · ${l.set_name || ''}` : [l.drink_name, l.dessert_name].filter(Boolean).join(' + ')); }
+function orderLineItems(l) { return (l.items || []).map((i) => i.name_en).join(', '); }
+
 /* expandable order card (customer + admin) */
 function orderCard(o, { light = false, open = false, extra = '', badge = '', aside = '' } = {}) {
   const rows = o.lines.map((l) => {
-    const name = [l.drink_name, l.dessert_name].filter(Boolean).join(' + ');
-    return `<tr><td>${esc(name)}</td><td class="q">x ${l.quantity}</td><td class="p">${money(l.line_total)}</td></tr>`;
+    const items = orderLineItems(l);
+    return `<tr><td>${esc(orderLineName(l))}${items ? `<br><small class="items-inline">${esc(items)}</small>` : ''}</td><td class="q">x ${l.quantity}</td><td class="p">${money(l.line_total)}</td></tr>`;
   }).join('');
   return `<div class="order" data-id="${esc(o.id)}">
     <button type="button" class="head ${light ? 'light' : ''}" aria-expanded="${open}">

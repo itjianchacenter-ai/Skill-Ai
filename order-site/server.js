@@ -28,9 +28,16 @@ function readJson(name, fallback) {
   try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, name), 'utf8')); } catch (e) { return fallback; }
 }
 function loadMenu() {
-  const m = readJson('menu.json', { drinks: [], desserts: [] });
+  const m = readJson('menu.json', { sets: [] });
   const norm = (x) => ({ id: String(x.id), name_en: x.name_en || '', name_th: x.name_th || '', price: Number(x.price) || 0, image: x.image || '', active: x.active !== false });
-  return { banner: m.banner || '', drinks: (m.drinks || []).map(norm).filter((x) => x.active), desserts: (m.desserts || []).map(norm).filter((x) => x.active) };
+  // A Match Set is what the customer orders: one card with a price, up to 3 thumbnails and the items inside it.
+  const normSet = (x) => {
+    const items = (x.items || []).map((i) => ({ name_en: i.name_en || '', name_th: i.name_th || '', kind: i.kind === 'drink' ? 'drink' : (i.kind === 'dessert' ? 'dessert' : '') }));
+    const pieces = Number.isInteger(Number(x.pieces)) && Number(x.pieces) > 0 ? Number(x.pieces) : 1;
+    return { ...norm(x), label: x.label || `SET ${String(x.id)}`, images: Array.isArray(x.images) ? x.images.slice(0, 3).map((u) => u || '') : [], items, pieces,
+      drink_pieces: items.filter((i) => i.kind === 'drink').length, dessert_pieces: items.filter((i) => i.kind === 'dessert').length };
+  };
+  return { banner: m.banner || '', sets: (m.sets || []).map(normSet).filter((x) => x.active), drinks: (m.drinks || []).map(norm).filter((x) => x.active), desserts: (m.desserts || []).map(norm).filter((x) => x.active) };
 }
 function loadStores() {
   return readJson('stores.json', []).filter((s) => s.active !== false).map((s) => ({ id: String(s.id), brand: s.brand || 'JIAN CHA', name: s.name || '', map_url: s.map_url || '' }));
@@ -54,10 +61,11 @@ function campaignView(c) {
 }
 /** Pieces committed by every non-cancelled order of a campaign (pending ones reserve stock). */
 function stockUsage(campaignId) {
-  const r = db.prepare(`SELECT COALESCE(SUM(CASE WHEN l.drink_id <> '' THEN l.quantity ELSE 0 END), 0) AS drink,
-                               COALESCE(SUM(CASE WHEN l.dessert_id <> '' THEN l.quantity ELSE 0 END), 0) AS dessert
+  const r = db.prepare(`SELECT COALESCE(SUM(l.quantity * COALESCE(l.pieces, 1)), 0) AS total,
+                               COALESCE(SUM(l.quantity * COALESCE(l.drink_pieces, 0)), 0) AS drink,
+                               COALESCE(SUM(l.quantity * COALESCE(l.dessert_pieces, 0)), 0) AS dessert
                         FROM order_lines l JOIN orders o ON o.id = l.order_id WHERE o.status <> 'cancelled' AND o.campaign_id = ?`).get(campaignId);
-  return { drink: r.drink, dessert: r.dessert, total: r.drink + r.dessert };
+  return { drink: r.drink, dessert: r.dessert, total: r.total };
 }
 function stockView(c) {
   const limits = { total: c.stock_total, drink: c.stock_drink, dessert: c.stock_dessert };
@@ -70,7 +78,7 @@ function stockShortfall(want, c) {
   const label = { total: 'สินค้า', drink: 'เครื่องดื่ม', dessert: 'ของหวาน' };
   for (const k of ['total', 'drink', 'dessert']) {
     if (remaining[k] != null && want[k] > remaining[k]) {
-      return remaining[k] === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${remaining[k]} ชิ้น (สั่ง ${want[k]} ชิ้น) / Only ${remaining[k]} left`;
+      return remaining[k] === 0 ? `${label[k]}หมดแล้ว / Sold out` : `${label[k]}เหลือเพียง ${remaining[k]} ชุด (สั่ง ${want[k]} ชุด) / Only ${remaining[k]} left`;
     }
   }
   return '';
@@ -150,7 +158,7 @@ app.get('/api/config', (req, res) => res.json({ payment_ready: qrConfigured(), s
 
 const money = (n) => Math.round(Number(n) * 100) / 100;
 
-/** Body: { store_id, note, lines: [{drink_id, dessert_id, quantity}] } */
+/** Body: { store_id, note, lines: [{set_id, quantity}] } (drink_id/dessert_id lines are still accepted for older clients) */
 app.post('/api/orders', (req, res) => {
   const { store_id, note = '', lines } = req.body || {};
   const store = loadStores().find((s) => s.id === String(store_id));
@@ -160,8 +168,18 @@ app.post('/api/orders', (req, res) => {
   const campaign = activeCampaign();
   const drinks = Object.fromEntries(menu.drinks.map((d) => [d.id, d]));
   const desserts = Object.fromEntries(menu.desserts.map((d) => [d.id, d]));
+  const sets = Object.fromEntries(menu.sets.map((s) => [s.id, s]));
   const rows = [];
   for (const l of lines) {
+    const qty0 = parseInt(l.quantity, 10);
+    if (l.set_id) {
+      const set = sets[String(l.set_id)];
+      if (!set) return res.status(400).json({ error: 'มีเซ็ตที่ไม่มีให้บริการแล้ว กรุณาเลือกใหม่' });
+      if (!Number.isInteger(qty0) || qty0 < 1 || qty0 > 99) return res.status(400).json({ error: 'รายการสินค้าไม่ถูกต้อง' });
+      rows.push({ set_id: set.id, set_label: set.label, set_name: set.name_en, items_json: JSON.stringify(set.items), pieces: set.pieces, drink_pieces: set.drink_pieces, dessert_pieces: set.dessert_pieces,
+        drink_id: '', drink_name: '', dessert_id: '', dessert_name: '', quantity: qty0, unit_price: money(set.price), line_total: money(set.price * qty0) });
+      continue;
+    }
     const drink = l.drink_id ? drinks[String(l.drink_id)] : null;
     const dessert = l.dessert_id ? desserts[String(l.dessert_id)] : null;
     const qty = parseInt(l.quantity, 10);
@@ -169,13 +187,14 @@ app.post('/api/orders', (req, res) => {
     if ((l.drink_id && !drink) || (l.dessert_id && !dessert)) return res.status(400).json({ error: 'มีเมนูที่ไม่มีให้บริการแล้ว กรุณาเลือกใหม่' });
     const unit = money((drink ? drink.price : 0) + (dessert ? dessert.price : 0));
     rows.push({
+      set_id: '', set_label: '', set_name: '', items_json: '', pieces: (drink ? 1 : 0) + (dessert ? 1 : 0), drink_pieces: drink ? 1 : 0, dessert_pieces: dessert ? 1 : 0,
       drink_id: drink ? drink.id : '', drink_name: drink ? drink.name_en : '',
       dessert_id: dessert ? dessert.id : '', dessert_name: dessert ? dessert.name_en : '',
       quantity: qty, unit_price: unit, line_total: money(unit * qty),
     });
   }
   const total = money(rows.reduce((s, r) => s + r.line_total, 0));
-  const want = rows.reduce((w, r) => { if (r.drink_id) w.drink += r.quantity; if (r.dessert_id) w.dessert += r.quantity; w.total = w.drink + w.dessert; return w; }, { drink: 0, dessert: 0, total: 0 });
+  const want = rows.reduce((w, r) => { w.total += r.quantity * r.pieces; w.drink += r.quantity * r.drink_pieces; w.dessert += r.quantity * r.dessert_pieces; return w; }, { drink: 0, dessert: 0, total: 0 });
   const id = crypto.randomUUID();
   const create = db.transaction(() => {
     const short = stockShortfall(want, campaign); // checked inside the write transaction so two customers cannot both take the last pieces
@@ -186,9 +205,9 @@ app.post('/api/orders', (req, res) => {
     db.prepare(`INSERT INTO orders(id, order_number, customer_id, campaign_id, store_id, store_name, total, note, status, paid_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, order_number, req.customerId, campaign.id, store.id, `${store.brand} - ${store.name}`, total, String(note).slice(0, 500),
                 total > 0 ? 'pending' : 'paid', total > 0 ? null : new Date().toISOString().slice(0, 19).replace('T', ' '));
-    const ins = db.prepare(`INSERT INTO order_lines(order_id, drink_id, drink_name, dessert_id, dessert_name, quantity, unit_price, line_total)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    for (const r of rows) ins.run(id, r.drink_id, r.drink_name, r.dessert_id, r.dessert_name, r.quantity, r.unit_price, r.line_total);
+    const ins = db.prepare(`INSERT INTO order_lines(order_id, set_id, set_label, set_name, items_json, pieces, drink_pieces, dessert_pieces, drink_id, drink_name, dessert_id, dessert_name, quantity, unit_price, line_total)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const r of rows) ins.run(id, r.set_id, r.set_label, r.set_name, r.items_json, r.pieces, r.drink_pieces, r.dessert_pieces, r.drink_id, r.drink_name, r.dessert_id, r.dessert_name, r.quantity, r.unit_price, r.line_total);
   });
   try { create(); } catch (e) { if (e.status === 409) return res.status(409).json({ error: e.message, stock: stockView(campaign) }); throw e; }
   res.status(201).json(orderView(getOrder(id)));
@@ -208,7 +227,11 @@ function orderView(o, { admin = false } = {}) {
     total: o.total, status: o.status, note: o.note, created_at: o.created_at, paid_at: o.paid_at,
     picked_up_at: o.picked_up_at, has_slip: Boolean(o.slip_path), slip_reason: o.slip_reason,
     promo_code: o.promo_code || null, code_available: ['paid', 'picked_up'].includes(o.status), payable: PAYABLE.includes(o.status),
-    lines: (o.lines || []).map((l) => ({ drink_id: l.drink_id, drink_name: l.drink_name, dessert_id: l.dessert_id, dessert_name: l.dessert_name, quantity: l.quantity, unit_price: l.unit_price, line_total: l.line_total })),
+    lines: (o.lines || []).map((l) => {
+      let items = []; try { items = l.items_json ? JSON.parse(l.items_json) : []; } catch (e) { items = []; }
+      const name = l.set_id ? `${l.set_label || 'SET ' + l.set_id} · ${l.set_name}` : [l.drink_name, l.dessert_name].filter(Boolean).join(' + ');
+      return { set_id: l.set_id || '', set_label: l.set_label || '', set_name: l.set_name || '', items, name, pieces: l.pieces ?? 1, drink_id: l.drink_id, drink_name: l.drink_name, dessert_id: l.dessert_id, dessert_name: l.dessert_name, quantity: l.quantity, unit_price: l.unit_price, line_total: l.line_total };
+    }),
   };
   if (admin) Object.assign(v, { customer_id: o.customer_id, slip_url: o.slip_path ? `/uploads/${path.basename(o.slip_path)}` : '', slip_ref: o.slip_ref, slip_amount: o.slip_amount, slip_verified: o.slip_verified, cancelled_at: o.cancelled_at });
   return v;

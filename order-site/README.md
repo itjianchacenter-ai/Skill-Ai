@@ -68,7 +68,7 @@ npm start                # http://localhost:3870
 
 ## จำกัดจำนวนสินค้า (stock)
 
-ใน `data/menu.json` ส่วน `stock` กำหนดจำนวนชิ้นสูงสุดที่ขายได้ทั้งแคมเปญ (นับเครื่องดื่ม 1 แก้ว = 1 ชิ้น ของหวาน 1 ชิ้น = 1 ชิ้น)
+สต๊อกนับเป็น "ชุด": ทุกเซ็ตที่สั่ง 1 ชุด = 1 หน่วยของสต๊อก (ค่าเริ่มต้น) ถ้าต้องการให้เซ็ตไหนกินสต๊อกมากกว่านั้น ใส่ `pieces` ในเซ็ตนั้น (เช่น `"pieces": 3` = 1 ชุดกิน 3 หน่วย) ค่า `stock.total` ของแคมเปญคือจำนวนหน่วยสูงสุด (1,000)
 
 ```json
 "stock": { "total": 1000 }
@@ -88,7 +88,7 @@ npm start                # http://localhost:3870
 
 ## แก้เมนูและสาขา
 
-- `data/menu.json` — เครื่องดื่ม (`drinks`), ของหวาน (`desserts`): `id`, `name_en`, `name_th`, `price`, `image` (path รูปใน `public/img/menu/` หรือ URL), `banner` รูปแบนเนอร์หน้าแรก
+- `data/menu.json` — เซ็ตเมนู (`sets`): `id`, `label` (เช่น SET A), `name_en`, `name_th`, `price`, `image` (รูปใหญ่), `images` (รูปย่อย 3 รูป), `items` (รายการในเซ็ต: `name_en`, `name_th`, `kind` = drink/dessert), `pieces` (หน่วยสต๊อกต่อ 1 ชุด ค่าเริ่มต้น 1), `banner` รูปแบนเนอร์หน้าแรก path รูปอยู่ใน `public/img/menu/` หรือเป็น URL
 - `data/stores.json` — สาขา: `id`, `brand`, `name`, `map_url`, `active`
 
 ไฟล์ทั้งสองอ่านใหม่ทุกครั้งที่มีการเรียก ไม่ต้องรีสตาร์ท

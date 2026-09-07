@@ -44,7 +44,7 @@
 <script>
 (async () => {
   renderHeader('cart');
-  $('#lbl-match').innerHTML = ICONS.match + ' Your Match';
+  $('#lbl-match').innerHTML = ICONS.match + ' Match Sets';
   $('#lbl-pickup').innerHTML = ICONS.pin + ' Pick-up Location';
   $('#lbl-cart').innerHTML = ICONS.cart + ' Cart Summary';
   const [menu, stores] = await Promise.all([getMenu(), api('/api/stores')]);
@@ -54,17 +54,14 @@
   $('#note').value = getNote();
   $('#note').addEventListener('input', (e) => setNote(e.target.value));
   $('#stores').addEventListener('click', (e) => { const b = e.target.closest('[data-store]'); if (b) { setStore(b.dataset.store); render(); } });
-  bindMatchControls($('#matches'), render, { getStock, errEl: $('#stock-err') });
+  bindMatchControls($('#matches'), render, { getStock, errEl: $('#stock-err'), map });
   function render() {
     const cart = loadCart(); const storeId = getStore(); const store = stores.find((s) => s.id === storeId);
     $('#stock-pill').innerHTML = stockPill(stock);
     $('#confirm').disabled = Boolean(stock && stock.sold_out);
-    $('#matches').innerHTML = cart.map((l) => matchCard(l, map)).join('') || '<div class="match add">ตะกร้าว่าง<br><a href="/">กลับไปเลือกเมนู</a></div>';
+    $('#matches').innerHTML = cart.map((l) => matchCard(l, map)).join('') || '<div class="match add">ตะกร้าว่าง<br><a href="/">กลับไปเลือกเซ็ต</a></div>';
     $('#stores').innerHTML = storeChips(stores, storeId);
-    // aggregate per menu item, as in the design
-    const agg = new Map();
-    for (const l of cart) for (const p of lineParts(l, map)) { const a = agg.get(p.id) || { ...p, qty: 0 }; a.qty += l.quantity; agg.set(p.id, a); }
-    $('#lines').innerHTML = Array.from(agg.values()).map((a) => `<li><span>${esc(a.name_en)}</span><span>x ${a.qty}</span><span class="p">${money(a.price * a.qty)} ฿</span></li>`).join('') || '<li><span class="empty">ยังไม่มีรายการ</span></li>';
+    $('#lines').innerHTML = cart.map((l) => `<li><span>${esc(lineName(l, map))}</span><span>x ${l.quantity}</span><span class="p">${money(linePrice(l, map) * l.quantity)} ฿</span></li>`).join('') || '<li><span class="empty">ยังไม่มีรายการ</span></li>';
     const total = cart.reduce((s, l) => s + linePrice(l, map) * l.quantity, 0);
     $('#total').textContent = money(total) + ' ฿';
     $('#store-name').innerHTML = store ? `<span class="th" style="font-size:13px;display:block">สถานที่รับของ</span>${esc(store.brand)} - ${esc(store.name)}` : '<span class="th" style="font-weight:400;font-size:13px">ยังไม่ได้เลือกสถานที่รับของ</span>';
